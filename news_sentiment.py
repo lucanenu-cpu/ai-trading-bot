@@ -101,36 +101,29 @@ ASSET_KEYWORDS = {
 }
 
 # ---------------------------------------------------------------------------
-# FinBERT sentiment pipeline (lazy‑loaded)
+# Keyword-based sentiment (lightweight replacement for FinBERT)
 # ---------------------------------------------------------------------------
-_finbert_pipeline = None
-
-
-def _get_finbert():
-    global _finbert_pipeline
-    if _finbert_pipeline is None:
-        try:
-            from transformers import pipeline as hf_pipeline
-            _finbert_pipeline = hf_pipeline(
-                "text-classification",
-                model="ProsusAI/finbert",
-                tokenizer="ProsusAI/finbert",
-            )
-        except Exception:
-            _finbert_pipeline = None
-    return _finbert_pipeline
+_POSITIVE_WORDS = {
+    "surge", "jump", "rally", "gain", "bull", "boom", "soar", "record high",
+    "beat", "upgrade", "approval", "growth", "profit", "revenue beat",
+}
+_NEGATIVE_WORDS = {
+    "crash", "plunge", "drop", "fall", "bear", "bust", "tank", "record low",
+    "miss", "downgrade", "reject", "loss", "revenue miss", "bankruptcy",
+    "layoff", "fraud", "hack", "default",
+}
 
 
 def _finbert_sentiment(text: str) -> dict:
-    """Return FinBERT label + score, falling back to neutral on error."""
-    pipe = _get_finbert()
-    if pipe is None:
-        return {"label": "neutral", "score": 0.5}
-    try:
-        result = pipe(text[:512])[0]
-        return {"label": result["label"].lower(), "score": float(result["score"])}
-    except Exception:
-        return {"label": "neutral", "score": 0.5}
+    """Return sentiment label + score using keyword matching."""
+    text_lower = text.lower()
+    pos = sum(1 for w in _POSITIVE_WORDS if w in text_lower)
+    neg = sum(1 for w in _NEGATIVE_WORDS if w in text_lower)
+    if pos > neg:
+        return {"label": "positive", "score": min(0.5 + pos * 0.1, 0.95)}
+    elif neg > pos:
+        return {"label": "negative", "score": min(0.5 + neg * 0.1, 0.95)}
+    return {"label": "neutral", "score": 0.5}
 
 
 # ---------------------------------------------------------------------------
