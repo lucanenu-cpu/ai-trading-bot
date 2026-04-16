@@ -8,18 +8,31 @@ from news_sentiment import analyze_news_impact
 from ai_advisor import get_trade_recommendation
 from scheduler import start_scheduler_thread
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+
 app = Flask(__name__, static_folder="static", template_folder="templates")
 logger = logging.getLogger(__name__)
 
-_scheduler_launched = False
+
+# Start scheduler immediately at import time (works with gunicorn workers)
+def _boot_scheduler():
+    """Start scheduler + send startup test message."""
+    from notifications import send_telegram
+
+    token = config.TELEGRAM_BOT_TOKEN
+    chat_id = config.TELEGRAM_CHAT_ID
+    logger.info(f"Telegram config: token={'SET' if token else 'MISSING'}, chat_id={'SET' if chat_id else 'MISSING'}")
+
+    if token and chat_id:
+        success = send_telegram("🤖 <b>AI Trading Bot started!</b>\nChecking Telegram connection...")
+        logger.info(f"Telegram test message: {'SUCCESS' if success else 'FAILED'}")
+    else:
+        logger.warning("Telegram not configured - bot token or chat ID missing")
+
+    start_scheduler_thread()
 
 
-@app.before_request
-def _start_scheduler_once():
-    global _scheduler_launched
-    if not _scheduler_launched:
-        _scheduler_launched = True
-        start_scheduler_thread()
+_boot_scheduler()
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +142,22 @@ def webhook():
     except Exception as exc:
         logger.exception("Webhook error for %s", symbol)
         return jsonify({"success": False, "error": "Webhook processing failed."}), 500
+
+
+# ---------------------------------------------------------------------------
+# Telegram test
+# ---------------------------------------------------------------------------
+
+@app.route("/api/test-telegram")
+def test_telegram():
+    """Send a test message to Telegram to verify configuration."""
+    from notifications import send_telegram
+    success = send_telegram("✅ <b>Test message</b>\nIf you see this, Telegram is working!")
+    return jsonify({
+        "success": success,
+        "token_set": bool(config.TELEGRAM_BOT_TOKEN),
+        "chat_id_set": bool(config.TELEGRAM_CHAT_ID),
+    })
 
 
 # ---------------------------------------------------------------------------
