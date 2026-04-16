@@ -1,9 +1,12 @@
 import datetime
+import logging
 import re
 import requests
 from datetime import timezone
 
 import config
+
+logger = logging.getLogger(__name__)
 
 try:
     from twilio.rest import Client as TwilioClient
@@ -19,6 +22,8 @@ except ImportError:
 def send_telegram(message: str, parse_mode: str = "HTML") -> bool:
     """Send a message via Telegram Bot API. Returns True on success."""
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
+        logger.warning("Telegram not configured: token=%s, chat_id=%s",
+                       bool(config.TELEGRAM_BOT_TOKEN), bool(config.TELEGRAM_CHAT_ID))
         return False
 
     url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -29,8 +34,13 @@ def send_telegram(message: str, parse_mode: str = "HTML") -> bool:
     }
     try:
         resp = requests.post(url, json=payload, timeout=10)
+        if resp.status_code != 200:
+            logger.error("Telegram API error: %s %s", resp.status_code, resp.text)
+        else:
+            logger.info("Telegram message sent successfully")
         return resp.status_code == 200
-    except Exception:
+    except Exception as e:
+        logger.error("Telegram send failed: %s", e)
         return False
 
 
