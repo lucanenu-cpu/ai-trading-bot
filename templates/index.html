@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Trading Bot Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>🤖 AI Trading Bot</h1>
+      <p class="subtitle">Real‑time market analysis &amp; AI‑powered trade signals</p>
+    </div>
+  </header>
+
+  <main>
+    <!-- Search bar -->
+    <section class="search-section">
+      <div class="search-box">
+        <input
+          id="symbol-input"
+          type="text"
+          placeholder="Enter symbol (e.g. AAPL, BTC-USD, SPY)"
+          autocomplete="off"
+        />
+        <button id="analyze-btn">Analyze</button>
+        <button id="recommend-btn">AI Recommend</button>
+      </div>
+      <div id="error-msg" class="error-msg hidden"></div>
+    </section>
+
+    <!-- Watchlist quick buttons -->
+    <section class="watchlist-section">
+      <h2>Watchlist</h2>
+      <div id="watchlist-chips" class="chip-row"></div>
+    </section>
+
+    <!-- Loading spinner -->
+    <div id="loading" class="hidden">
+      <div class="spinner"></div>
+      <p>Analyzing… this may take a moment</p>
+    </div>
+
+    <!-- Results grid -->
+    <section id="results" class="results hidden">
+      <!-- Market card -->
+      <div class="card" id="market-card">
+        <h3>📊 Market Analysis — <span id="res-symbol"></span></h3>
+        <div class="stat-grid">
+          <div class="stat">
+            <span class="stat-label">Price</span>
+            <span class="stat-value" id="res-price"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Prediction</span>
+            <span class="stat-value" id="res-direction"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Confidence</span>
+            <span class="stat-value" id="res-confidence"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">CV Accuracy</span>
+            <span class="stat-value" id="res-accuracy"></span>
+          </div>
+        </div>
+
+        <h4>Technical Indicators</h4>
+        <div class="stat-grid">
+          <div class="stat">
+            <span class="stat-label">RSI</span>
+            <span class="stat-value" id="res-rsi"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">MACD</span>
+            <span class="stat-value" id="res-macd"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">ADX</span>
+            <span class="stat-value" id="res-adx"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">ATR</span>
+            <span class="stat-value" id="res-atr"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">EMA Trend</span>
+            <span class="stat-value" id="res-ema-trend"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- News card -->
+      <div class="card" id="news-card">
+        <h3>📰 News Sentiment</h3>
+        <div class="stat-grid">
+          <div class="stat">
+            <span class="stat-label">Overall Impact</span>
+            <span class="stat-value" id="res-impact"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Impact Score</span>
+            <span class="stat-value" id="res-impact-score"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Articles</span>
+            <span class="stat-value" id="res-articles"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">High‑Impact Events</span>
+            <span class="stat-value" id="res-hi-events"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI recommendation card -->
+      <div class="card full-width hidden" id="recommendation-card">
+        <h3>🧠 AI Trade Recommendation</h3>
+        <pre id="res-recommendation"></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>⚠️ This dashboard is for informational purposes only. Not financial advice.</p>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
