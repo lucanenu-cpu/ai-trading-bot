@@ -113,17 +113,27 @@ _NEGATIVE_WORDS = {
     "layoff", "fraud", "hack", "default",
 }
 
+_SENTIMENT_BASE_SCORE = 0.5
+_SENTIMENT_SCORE_INCREMENT = 0.1
+_SENTIMENT_MAX_SCORE = 0.95
+
+
+def _word_match(word: str, text_lower: str) -> bool:
+    """Return True if *word* appears as a complete phrase in *text_lower*."""
+    pattern = r"(?<!\w)" + re.escape(word) + r"(?!\w)"
+    return bool(re.search(pattern, text_lower))
+
 
 def _finbert_sentiment(text: str) -> dict:
     """Return sentiment label + score using keyword matching."""
     text_lower = text.lower()
-    pos = sum(1 for w in _POSITIVE_WORDS if w in text_lower)
-    neg = sum(1 for w in _NEGATIVE_WORDS if w in text_lower)
+    pos = sum(1 for w in _POSITIVE_WORDS if _word_match(w, text_lower))
+    neg = sum(1 for w in _NEGATIVE_WORDS if _word_match(w, text_lower))
     if pos > neg:
-        return {"label": "positive", "score": min(0.5 + pos * 0.1, 0.95)}
+        return {"label": "positive", "score": min(_SENTIMENT_BASE_SCORE + pos * _SENTIMENT_SCORE_INCREMENT, _SENTIMENT_MAX_SCORE)}
     elif neg > pos:
-        return {"label": "negative", "score": min(0.5 + neg * 0.1, 0.95)}
-    return {"label": "neutral", "score": 0.5}
+        return {"label": "negative", "score": min(_SENTIMENT_BASE_SCORE + neg * _SENTIMENT_SCORE_INCREMENT, _SENTIMENT_MAX_SCORE)}
+    return {"label": "neutral", "score": _SENTIMENT_BASE_SCORE}
 
 
 # ---------------------------------------------------------------------------
