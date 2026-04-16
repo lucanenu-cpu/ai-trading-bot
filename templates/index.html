@@ -24,8 +24,8 @@
           placeholder="Enter symbol (e.g. AAPL, BTC-USD, SPY)"
           autocomplete="off"
         />
-        <button id="analyze-btn">Analyze</button>
-        <button id="recommend-btn">AI Recommend</button>
+        <button id="analyze-btn">⚡ Analyze</button>
+        <button id="recommend-btn">🧠 AI Recommend</button>
       </div>
       <div id="error-msg" class="error-msg hidden"></div>
     </section>
@@ -44,14 +44,41 @@
 
     <!-- Results grid -->
     <section id="results" class="results hidden">
-      <!-- Market card -->
-      <div class="card" id="market-card">
-        <h3>📊 Market Analysis — <span id="res-symbol"></span></h3>
-        <div class="stat-grid">
-          <div class="stat">
-            <span class="stat-label">Price</span>
-            <span class="stat-value" id="res-price"></span>
+
+      <!-- Smart Score hero card -->
+      <div class="card full-width" id="score-card">
+        <div class="score-hero">
+          <div class="score-left">
+            <div class="score-symbol" id="res-symbol">—</div>
+            <div class="score-price" id="res-price">—</div>
+            <div class="score-updated" id="res-updated"></div>
           </div>
+          <div class="score-center">
+            <div class="score-gauge-wrap">
+              <svg class="score-gauge" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+                <!-- background arc -->
+                <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#30363d" stroke-width="12" stroke-linecap="round"/>
+                <!-- colored arc filled by JS -->
+                <path id="gauge-arc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#d29922" stroke-width="12" stroke-linecap="round"
+                  stroke-dasharray="172.79" stroke-dashoffset="172.79"/>
+              </svg>
+              <div class="score-number-wrap">
+                <span class="score-number" id="res-score">—</span>
+                <span class="score-label-small">/100</span>
+              </div>
+            </div>
+          </div>
+          <div class="score-right">
+            <div class="action-badge" id="res-action">—</div>
+            <div class="score-signals" id="res-signals"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Market / indicators card -->
+      <div class="card" id="market-card">
+        <h3>📊 Market Analysis</h3>
+        <div class="stat-grid">
           <div class="stat">
             <span class="stat-label">Prediction</span>
             <span class="stat-value" id="res-direction"></span>

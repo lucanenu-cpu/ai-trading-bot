@@ -27,7 +27,7 @@
         chip.textContent = sym;
         chip.addEventListener("click", () => {
           symbolInput.value = sym;
-          runAnalysis(sym);
+          runSmartScore(sym);
         });
         watchlistChips.appendChild(chip);
       });
@@ -40,7 +40,7 @@
   analyzeBtn.addEventListener("click", () => {
     const sym = symbolInput.value.trim().toUpperCase();
     if (!sym) return showError("Please enter a symbol.");
-    runAnalysis(sym);
+    runSmartScore(sym);
   });
 
   recommendBtn.addEventListener("click", () => {
@@ -54,17 +54,17 @@
   });
 
   // ------------------------------------------------------------------
-  // Analysis flow
+  // Smart Score flow  (/api/score/<symbol>  — no OpenAI needed)
   // ------------------------------------------------------------------
-  function runAnalysis(symbol) {
+  function runSmartScore(symbol) {
     showLoading();
     hideError();
     recommendationCard.classList.add("hidden");
 
-    fetch(`/analyze/${encodeURIComponent(symbol)}`)
+    fetch(`/api/score/${encodeURIComponent(symbol)}`)
       .then(checkStatus)
       .then((data) => {
-        renderAnalysis(data);
+        renderScore(data);
         showResults();
       })
       .catch((err) => {
@@ -73,16 +73,19 @@
       });
   }
 
+  // ------------------------------------------------------------------
+  // Recommendation flow  (/recommend/<symbol>  — needs OpenAI)
+  // ------------------------------------------------------------------
   function runRecommendation(symbol) {
     showLoading();
     hideError();
     recommendationCard.classList.add("hidden");
 
-    // Run analysis first to populate cards, then recommendation
-    fetch(`/analyze/${encodeURIComponent(symbol)}`)
+    // First get smart score to populate cards, then get AI recommendation
+    fetch(`/api/score/${encodeURIComponent(symbol)}`)
       .then(checkStatus)
       .then((data) => {
-        renderAnalysis(data);
+        renderScore(data);
         showResults();
         return fetch(`/recommend/${encodeURIComponent(symbol)}`);
       })
@@ -100,21 +103,52 @@
   }
 
   // ------------------------------------------------------------------
-  // Render helpers
+  // Render smart score data
   // ------------------------------------------------------------------
-  function renderAnalysis(data) {
-    const market = data.market;
-    const news = data.news;
-    const pred = market.prediction;
-    const ind = market.indicators;
+  function renderScore(data) {
+    const pred = data.prediction;
+    const ind  = data.indicators;
 
+    // Hero — symbol, price, timestamp
     setText("res-symbol", data.symbol);
-    setText("res-price", `$${market.price}`);
+    setText("res-price", formatPrice(data.price));
+    const now = new Date();
+    setText("res-updated", `Last updated: ${now.toLocaleTimeString()}`);
 
+    // Smart Score gauge
+    const score = data.smart_score;
+    const scoreEl = document.getElementById("res-score");
+    scoreEl.textContent = score;
+    // Arc: full circumference ≈ 172.79 (for the half-circle path)
+    const arcLen = 172.79;
+    const offset = arcLen - (score / 100) * arcLen;
+    const arc = document.getElementById("gauge-arc");
+    if (arc) {
+      arc.setAttribute("stroke-dashoffset", offset.toFixed(2));
+      arc.setAttribute("stroke", scoreColor(score));
+    }
+    scoreEl.style.color = scoreColor(score);
+
+    // Action badge
+    const actionEl = document.getElementById("res-action");
+    const actionText = data.action || "HOLD 🟡";
+    actionEl.textContent = actionText;
+    actionEl.className = "action-badge " + actionClass(actionText);
+
+    // Signals list
+    const signalsEl = document.getElementById("res-signals");
+    signalsEl.innerHTML = "";
+    (data.signals || []).forEach((sig) => {
+      const div = document.createElement("div");
+      div.className = "signal-item";
+      div.textContent = sig;
+      signalsEl.appendChild(div);
+    });
+
+    // Market / Prediction
     const dirEl = document.getElementById("res-direction");
     dirEl.textContent = pred.direction;
     dirEl.className = `stat-value ${pred.direction === "LONG" ? "bull" : "bear"}`;
-
     setText("res-confidence", `${pred.confidence}%`);
     setText("res-accuracy", `${pred.cv_accuracy}%`);
 
@@ -130,23 +164,39 @@
     );
 
     // News
+    const impact = data.news_impact;
     const impactEl = document.getElementById("res-impact");
-    impactEl.textContent = news.overall_impact;
+    impactEl.textContent = impact;
     impactEl.className = `stat-value ${
-      news.overall_impact === "HIGH"
-        ? "bear"
-        : news.overall_impact === "MEDIUM"
-        ? "neutral"
-        : "bull"
+      impact === "HIGH" ? "bear" : impact === "MEDIUM" ? "neutral" : "bull"
     }`;
-    setText("res-impact-score", news.impact_score);
-    setText("res-articles", news.article_count);
-    setText("res-hi-events", news.high_impact_count);
+    setText("res-impact-score", Number(data.news_score).toFixed(2));
+    setText("res-articles", data.article_count != null ? data.article_count : "—");
+    setText("res-hi-events", data.high_impact_count != null ? data.high_impact_count : "—");
   }
 
   // ------------------------------------------------------------------
   // Utilities
   // ------------------------------------------------------------------
+  function formatPrice(price) {
+    return "$" + Number(price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  function scoreColor(score) {
+    if (score >= 60) return "#3fb950";   // green
+    if (score >= 45) return "#d29922";   // yellow
+    return "#f85149";                    // red
+  }
+
+  function actionClass(action) {
+    const a = action.toLowerCase();
+    if (a.includes("strong buy"))  return "strong-buy";
+    if (a.includes("buy"))         return "buy";
+    if (a.includes("strong sell")) return "strong-sell";
+    if (a.includes("sell"))        return "sell";
+    return "hold";
+  }
+
   function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
