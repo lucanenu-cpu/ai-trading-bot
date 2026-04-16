@@ -12,5 +12,4 @@ ta
 yfinance
 flask
 python-dotenv
-schedule
 twilio
