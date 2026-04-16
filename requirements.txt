@@ -11,3 +11,4 @@ yfinance
 flask
 python-dotenv
 twilio
+gunicorn

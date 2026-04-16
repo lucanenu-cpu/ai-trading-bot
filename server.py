@@ -69,6 +69,19 @@ def recommend(symbol: str):
         return jsonify({"success": False, "error": "Recommendation failed. Please try again."}), 500
 
 
+@app.route("/api/score/<symbol>")
+def smart_score(symbol: str):
+    """Return a smart score (0-100) combining ML + technicals + news, no OpenAI needed."""
+    try:
+        symbol = symbol.upper()
+        from ai_advisor import get_smart_score
+        result = get_smart_score(symbol)
+        return jsonify({"success": True, **result})
+    except Exception as exc:
+        logger.exception("Error scoring %s", symbol)
+        return jsonify({"success": False, "error": "Scoring failed."}), 500
+
+
 @app.route("/news/<symbol>")
 def news(symbol: str):
     """Return the latest news and sentiment for a symbol."""
