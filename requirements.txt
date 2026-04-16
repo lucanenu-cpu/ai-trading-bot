@@ -6,8 +6,6 @@ xgboost
 requests
 beautifulsoup4
 feedparser
-transformers
-torch
 ta
 yfinance
 flask

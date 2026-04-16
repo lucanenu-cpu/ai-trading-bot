@@ -101,36 +101,39 @@ ASSET_KEYWORDS = {
 }
 
 # ---------------------------------------------------------------------------
-# FinBERT sentiment pipeline (lazy‑loaded)
+# Keyword-based sentiment (lightweight replacement for FinBERT)
 # ---------------------------------------------------------------------------
-_finbert_pipeline = None
+_POSITIVE_WORDS = {
+    "surge", "jump", "rally", "gain", "bull", "boom", "soar", "record high",
+    "beat", "upgrade", "approval", "growth", "profit", "revenue beat",
+}
+_NEGATIVE_WORDS = {
+    "crash", "plunge", "drop", "fall", "bear", "bust", "tank", "record low",
+    "miss", "downgrade", "reject", "loss", "revenue miss", "bankruptcy",
+    "layoff", "fraud", "hack", "default",
+}
+
+_SENTIMENT_BASE_SCORE = 0.5
+_SENTIMENT_SCORE_INCREMENT = 0.1
+_SENTIMENT_MAX_SCORE = 0.95
 
 
-def _get_finbert():
-    global _finbert_pipeline
-    if _finbert_pipeline is None:
-        try:
-            from transformers import pipeline as hf_pipeline
-            _finbert_pipeline = hf_pipeline(
-                "text-classification",
-                model="ProsusAI/finbert",
-                tokenizer="ProsusAI/finbert",
-            )
-        except Exception:
-            _finbert_pipeline = None
-    return _finbert_pipeline
+def _word_match(word: str, text_lower: str) -> bool:
+    """Return True if *word* appears as a complete phrase in *text_lower*."""
+    pattern = r"(?<!\w)" + re.escape(word) + r"(?!\w)"
+    return bool(re.search(pattern, text_lower))
 
 
 def _finbert_sentiment(text: str) -> dict:
-    """Return FinBERT label + score, falling back to neutral on error."""
-    pipe = _get_finbert()
-    if pipe is None:
-        return {"label": "neutral", "score": 0.5}
-    try:
-        result = pipe(text[:512])[0]
-        return {"label": result["label"].lower(), "score": float(result["score"])}
-    except Exception:
-        return {"label": "neutral", "score": 0.5}
+    """Return sentiment label + score using keyword matching."""
+    text_lower = text.lower()
+    pos = sum(1 for w in _POSITIVE_WORDS if _word_match(w, text_lower))
+    neg = sum(1 for w in _NEGATIVE_WORDS if _word_match(w, text_lower))
+    if pos > neg:
+        return {"label": "positive", "score": min(_SENTIMENT_BASE_SCORE + pos * _SENTIMENT_SCORE_INCREMENT, _SENTIMENT_MAX_SCORE)}
+    elif neg > pos:
+        return {"label": "negative", "score": min(_SENTIMENT_BASE_SCORE + neg * _SENTIMENT_SCORE_INCREMENT, _SENTIMENT_MAX_SCORE)}
+    return {"label": "neutral", "score": _SENTIMENT_BASE_SCORE}
 
 
 # ---------------------------------------------------------------------------
