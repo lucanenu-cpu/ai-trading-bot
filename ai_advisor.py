@@ -161,7 +161,7 @@ def get_trade_recommendation(symbol: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as exc:
         logger.error("OpenAI call failed for %s: %s", symbol, exc)
-        return f"[AI unavailable: {exc}]"
+        return "[AI unavailable — try again later or use local analysis]"
 
 
 # ---------------------------------------------------------------------------
@@ -329,8 +329,9 @@ def get_actionable_signal(symbol: str) -> dict:
     reasons = list(score_data["signals"])
 
     # --- Determine raw action from score + ML direction ---
-    # For BUY: bullish score must exceed MIN_SIGNAL_SCORE
-    # For SELL: bearish conviction = (100 - score) must exceed MIN_SIGNAL_SCORE
+    # Score moves UP from 50 for bullish signals (BUY when score >= MIN_SIGNAL_SCORE).
+    # Score moves DOWN from 50 for bearish signals; bearish_score = 100 - score inverts
+    # this so we can apply the same threshold for SELL decisions.
     bearish_score = 100.0 - score
 
     if pred_direction == "LONG" and score >= config.MIN_SIGNAL_SCORE:

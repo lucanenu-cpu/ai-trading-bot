@@ -81,7 +81,6 @@ def recommend(symbol: str):
         logger.exception("Error generating recommendation for %s", symbol)
         return jsonify({"success": False, "error": "Recommendation failed. Please try again."}), 500
 
-
 @app.route("/api/score/<symbol>")
 def smart_score(symbol: str):
     """Return a smart score (0-100) combining ML + technicals + news, no OpenAI needed."""

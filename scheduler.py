@@ -85,8 +85,8 @@ def scan_markets() -> None:
 
         try:
             signal = get_actionable_signal(symbol)
-            action = signal["action"]
-            score = signal["score"]
+            action = signal.get("action", "HOLD")
+            score = signal.get("score", 0)
 
             logger.info(
                 "Scan: %s action=%s score=%.1f confidence=%.1f",
