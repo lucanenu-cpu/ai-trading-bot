@@ -16,6 +16,9 @@ import config
 
 logger = logging.getLogger(__name__)
 
+# Max entries kept in the in-memory trade history (per RiskState).
+_MAX_TRADE_HISTORY = 20
+
 
 # ---------------------------------------------------------------------------
 # State dataclass
@@ -28,6 +31,8 @@ class RiskState:
     trades_today: int = 0
     realized_pnl_today: float = 0.0
     open_positions: list = field(default_factory=list)
+    # Recent trade records kept for dashboard display (not reset daily).
+    recent_trades: list = field(default_factory=list)
 
     # Singleton-style global state used by the scheduler
     _instance: Optional["RiskState"] = field(default=None, init=False, repr=False, compare=False)
@@ -35,6 +40,9 @@ class RiskState:
 
 # Module-level singleton
 _state = RiskState()
+
+# Per-symbol cooldown registry: {symbol: datetime_of_last_trade (UTC)}
+_last_trade_times: dict = {}
 
 
 def get_state() -> RiskState:
@@ -256,14 +264,65 @@ def allocation_recommendation(
 
 
 # ---------------------------------------------------------------------------
+# Per-symbol trade cooldown
+# ---------------------------------------------------------------------------
+
+def check_symbol_cooldown(symbol: str) -> tuple[bool, str]:
+    """
+    Check whether a trade on *symbol* is allowed given the per-symbol cooldown.
+
+    Uses the module-level ``_last_trade_times`` registry (separate from RiskState
+    so it survives daily resets).
+
+    Returns:
+        (True, "OK") if trading is allowed, or (False, reason) if still in cooldown.
+    """
+    cooldown_secs = config.TRADE_COOLDOWN_SECS
+    if cooldown_secs <= 0:
+        return True, "OK"
+    last = _last_trade_times.get(symbol)
+    if last is None:
+        return True, "OK"
+    elapsed = (datetime.datetime.now(timezone.utc) - last).total_seconds()
+    if elapsed < cooldown_secs:
+        remaining = int(cooldown_secs - elapsed)
+        reason = f"Cooldown active for {symbol} ({remaining}s remaining)"
+        logger.info("RiskGate BLOCKED: %s", reason)
+        return False, reason
+    return True, "OK"
+
+
+# ---------------------------------------------------------------------------
 # Record a trade
 # ---------------------------------------------------------------------------
 
-def record_trade(symbol: str, state: Optional[RiskState] = None) -> None:
-    """Increment daily trade counter and add symbol to open positions."""
+def record_trade(symbol: str, state: Optional[RiskState] = None, trade_details: Optional[dict] = None) -> None:
+    """Increment daily trade counter and add symbol to open positions.
+
+    Args:
+        symbol:        Asset symbol being traded.
+        state:         Optional RiskState instance (uses module singleton if None).
+        trade_details: Optional dict with keys action, price, score, stop_loss,
+                       take_profit, allocation_usd.  Stored in recent_trades.
+    """
     s = state if state is not None else _state
     reset_daily_if_needed(s)
     s.trades_today += 1
     if symbol not in s.open_positions:
         s.open_positions.append(symbol)
+
+    # Record cooldown timestamp on the module-level registry
+    _last_trade_times[symbol] = datetime.datetime.now(timezone.utc)
+
+    # Append to recent trade history (capped at _MAX_TRADE_HISTORY)
+    entry: dict = {
+        "symbol": symbol,
+        "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
+    }
+    if trade_details:
+        entry.update(trade_details)
+    s.recent_trades.append(entry)
+    if len(s.recent_trades) > _MAX_TRADE_HISTORY:
+        s.recent_trades = s.recent_trades[-_MAX_TRADE_HISTORY:]
+
     logger.info("RiskManager: recorded trade for %s (trades_today=%d)", symbol, s.trades_today)

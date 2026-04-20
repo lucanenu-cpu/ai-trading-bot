@@ -223,6 +223,19 @@ def get_smart_score(symbol: str) -> dict:
         score_breakdown["ema_delta"] = -10
         signals.append("📊 EMA alignment: BEARISH (9 < 21 < 50)")
 
+    # MACD momentum (up to ±8): positive macd_diff = bullish momentum
+    macd_diff = ind.get("macd", 0)
+    if macd_diff > 0:
+        score += 8
+        score_breakdown["macd_delta"] = 8
+        signals.append(f"📈 MACD bullish momentum (diff={macd_diff:+.4f})")
+    elif macd_diff < 0:
+        score -= 8
+        score_breakdown["macd_delta"] = -8
+        signals.append(f"📉 MACD bearish momentum (diff={macd_diff:+.4f})")
+    else:
+        score_breakdown["macd_delta"] = 0
+
     # ADX trend strength (up to ±5)
     adx = ind.get("adx", 20)
     if adx > 25:
@@ -317,6 +330,7 @@ def get_actionable_signal(symbol: str) -> dict:
         compute_trade_levels,
         allocation_recommendation,
         can_open_new_trade,
+        check_symbol_cooldown,
     )
 
     logger.info("ActionableSignal: generating for %s", symbol)
@@ -344,6 +358,18 @@ def get_actionable_signal(symbol: str) -> dict:
             reasons.insert(0, f"Score {score:.0f} below threshold {config.MIN_SIGNAL_SCORE:.0f}")
         else:
             reasons.insert(0, f"Bearish score {bearish_score:.0f} below threshold {config.MIN_SIGNAL_SCORE:.0f}")
+
+    # --- Choppiness / low-trend filter ---
+    # When ADX is below the configured threshold the market is ranging — skip trade
+    # to avoid overtrading in choppy conditions.
+    adx = score_data.get("indicators", {}).get("adx", 25.0)
+    if raw_action != "HOLD" and adx < config.CHOP_ADX_THRESHOLD:
+        logger.info(
+            "ActionableSignal: choppiness filter blocked %s — ADX=%.1f < %.1f",
+            symbol, adx, config.CHOP_ADX_THRESHOLD,
+        )
+        raw_action = "HOLD"
+        reasons.insert(0, f"Choppy market: ADX={adx:.1f} below threshold {config.CHOP_ADX_THRESHOLD:.0f} — avoiding trade")
 
     # --- AI refinement only for near-threshold or strong setups ---
     ai_used = False
@@ -375,14 +401,39 @@ def get_actionable_signal(symbol: str) -> dict:
         raw_action = "HOLD"
         reasons.insert(0, f"Risk gate: {gate_reason}")
 
+    # --- Per-symbol cooldown check ---
+    cooldown_ok, cooldown_reason = check_symbol_cooldown(symbol)
+    if not cooldown_ok and raw_action != "HOLD":
+        logger.info("ActionableSignal: cooldown blocked %s — %s", symbol, cooldown_reason)
+        raw_action = "HOLD"
+        reasons.insert(0, f"Cooldown: {cooldown_reason}")
+
     action = raw_action
+
+    # --- Dynamic ATR-based SL/TP ---
+    # Use ATR × multiplier as SL distance when ATR is available and multiplier > 0.
+    # This adapts SL to current market volatility rather than a fixed percentage.
+    atr = score_data.get("indicators", {}).get("atr", 0.0)
+    if config.ATR_SL_MULTIPLIER > 0 and atr > 0 and price > 0:
+        dynamic_sl_pct = (config.ATR_SL_MULTIPLIER * atr / price) * 100.0
+        # Cap between 0.5 % and 8 % to prevent absurdly wide/narrow stops
+        sl_pct = round(max(0.5, min(dynamic_sl_pct, 8.0)), 2)
+        # Maintain a 2 : 1 reward/risk ratio for the take-profit
+        tp_pct = round(sl_pct * 2.0, 2)
+        logger.debug(
+            "ActionableSignal: ATR-based SL for %s: ATR=%.4f → SL=%.2f%% TP=%.2f%%",
+            symbol, atr, sl_pct, tp_pct,
+        )
+    else:
+        sl_pct = config.DEFAULT_STOP_LOSS_PCT
+        tp_pct = config.DEFAULT_TAKE_PROFIT_PCT
 
     # --- SL/TP levels ---
     levels = compute_trade_levels(
         price=price,
         direction=action if action != "HOLD" else "BUY",
-        stop_loss_pct=config.DEFAULT_STOP_LOSS_PCT,
-        take_profit_pct=config.DEFAULT_TAKE_PROFIT_PCT,
+        stop_loss_pct=sl_pct,
+        take_profit_pct=tp_pct,
     )
 
     # --- Allocation sizing (use effective score for sizing decisions) ---

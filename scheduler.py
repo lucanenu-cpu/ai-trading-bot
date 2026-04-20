@@ -119,7 +119,14 @@ def scan_markets() -> None:
 
             send_trade_alert(symbol, analysis)
             _alert_cooldowns[symbol] = datetime.datetime.now(timezone.utc)
-            risk_manager.record_trade(symbol)
+            risk_manager.record_trade(symbol, trade_details={
+                "action": action,
+                "price": signal["price"],
+                "score": signal.get("score", 0),
+                "stop_loss": signal.get("risk", {}).get("stop_loss", 0),
+                "take_profit": signal.get("risk", {}).get("take_profit", 0),
+                "allocation_usd": signal.get("risk", {}).get("allocation_usd", 0),
+            })
 
         except Exception as exc:
             logger.error("Scan error for %s: %s", symbol, exc)

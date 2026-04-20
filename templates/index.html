@@ -7,139 +7,349 @@
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
+  <!-- ═══ HEADER ═══ -->
   <header>
     <div class="header-inner">
-      <h1>🤖 AI Trading Bot</h1>
-      <p class="subtitle">Real‑time signals · BUY / SELL / HOLD · Risk‑managed</p>
+      <div class="header-left">
+        <h1>🤖 AI Trading Bot</h1>
+        <p class="subtitle">Real‑time signals · BUY / SELL / HOLD · Risk‑managed</p>
+      </div>
+      <div class="header-status" id="header-status">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-label">—</span>
+        <span class="status-sep">|</span>
+        <span id="status-ai-calls">AI —/—</span>
+        <span class="status-sep">|</span>
+        <span id="status-trades">Trades —/—</span>
+      </div>
     </div>
   </header>
 
+  <!-- ═══ TABS ═══ -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="analyze">🔍 Analyze</button>
+    <button class="tab-btn" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+  </nav>
+
   <main>
-    <!-- Search -->
-    <section class="search-section">
-      <div class="search-box">
-        <input
-          id="symbol-input"
-          type="text"
-          placeholder="Symbol — e.g. AAPL, BTC-USD, SPY"
-          autocomplete="off"
-        />
-        <button id="analyze-btn">⚡ Analyze</button>
-      </div>
-      <div id="error-msg" class="error-msg hidden"></div>
-    </section>
 
-    <!-- Watchlist chips -->
-    <section class="watchlist-section">
-      <div id="watchlist-chips" class="chip-row"></div>
-    </section>
+    <!-- ══════════════════════════════
+         TAB: ANALYZE
+    ══════════════════════════════ -->
+    <div id="tab-analyze" class="tab-pane active">
 
-    <!-- Loading -->
-    <div id="loading" class="hidden">
-      <div class="spinner"></div>
-      <p>Analyzing… this may take a moment</p>
-    </div>
-
-    <!-- ── Main result card ── -->
-    <section id="results" class="hidden">
-
-      <!-- Action hero -->
-      <div class="card action-card" id="action-card">
-        <div class="action-hero">
-          <div class="action-left">
-            <div class="sym-price-row">
-              <span class="res-symbol" id="res-symbol">—</span>
-              <span class="res-price" id="res-price">—</span>
-            </div>
-            <div class="res-updated" id="res-updated"></div>
-          </div>
-          <div class="action-center">
-            <div class="action-badge" id="res-action">—</div>
-            <div class="action-sub" id="res-action-sub"></div>
-          </div>
-          <div class="action-right">
-            <div class="alloc-block">
-              <div class="alloc-label">Suggested amount</div>
-              <div class="alloc-usd" id="res-alloc-usd">—</div>
-              <div class="alloc-pct" id="res-alloc-pct">—</div>
-            </div>
-          </div>
+      <!-- Mode toggle -->
+      <div class="mode-toggle-row">
+        <div class="mode-toggle" id="mode-toggle">
+          <button class="mode-btn active" data-mode="symbol">📈 Symbol</button>
+          <button class="mode-btn" data-mode="ask">🧠 Ask AI</button>
         </div>
       </div>
 
-      <!-- Trade levels -->
-      <div class="card levels-card">
-        <h3>📍 Trade Levels</h3>
-        <div class="levels-grid">
-          <div class="level-item">
-            <span class="level-label">Entry</span>
-            <span class="level-value" id="res-entry">—</span>
-          </div>
-          <div class="level-item sl">
-            <span class="level-label">Stop-Loss</span>
-            <span class="level-value" id="res-sl">—</span>
-            <span class="level-pct" id="res-sl-pct"></span>
-          </div>
-          <div class="level-item tp">
-            <span class="level-label">Take-Profit</span>
-            <span class="level-value" id="res-tp">—</span>
-            <span class="level-pct" id="res-tp-pct"></span>
-          </div>
+      <!-- Search -->
+      <section class="search-section">
+        <div class="search-box">
+          <input
+            id="symbol-input"
+            type="text"
+            placeholder="Symbol — e.g. AAPL, BTC-USD, SPY"
+            autocomplete="off"
+          />
+          <button id="analyze-btn">⚡ Analyze</button>
         </div>
+        <div id="error-msg" class="error-msg hidden"></div>
+      </section>
+
+      <!-- Watchlist chips -->
+      <section class="watchlist-section">
+        <div id="watchlist-chips" class="chip-row"></div>
+      </section>
+
+      <!-- Loading -->
+      <div id="loading" class="hidden">
+        <div class="spinner"></div>
+        <p>Analyzing… this may take a moment</p>
       </div>
 
-      <!-- Score & confidence -->
-      <div class="card score-card">
-        <h3>📊 Signal Strength</h3>
-        <div class="score-row">
-          <div class="score-gauge-wrap">
-            <svg class="score-gauge" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
-              <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#30363d" stroke-width="12" stroke-linecap="round"/>
-              <path id="gauge-arc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#d29922" stroke-width="12" stroke-linecap="round"
-                stroke-dasharray="172.79" stroke-dashoffset="172.79"/>
-            </svg>
-            <div class="score-num-wrap">
-              <span class="score-num" id="res-score">—</span>
-              <span class="score-denom">/100</span>
+      <!-- ── Main result card ── -->
+      <section id="results" class="hidden">
+
+        <!-- Action hero -->
+        <div class="card action-card" id="action-card">
+          <div class="action-hero">
+            <div class="action-left">
+              <div class="sym-price-row">
+                <span class="res-symbol" id="res-symbol">—</span>
+                <span class="res-price" id="res-price">—</span>
+              </div>
+              <div class="res-updated" id="res-updated"></div>
             </div>
-          </div>
-          <div class="score-details">
-            <div class="score-stat">
-              <span class="score-stat-label">Confidence</span>
-              <span class="score-stat-value" id="res-confidence">—</span>
+            <div class="action-center">
+              <div class="action-badge" id="res-action">—</div>
+              <div class="action-sub" id="res-action-sub"></div>
             </div>
-            <div class="score-stat">
-              <span class="score-stat-label">EMA Trend</span>
-              <span class="score-stat-value" id="res-ema-trend">—</span>
-            </div>
-            <div class="score-stat">
-              <span class="score-stat-label">RSI</span>
-              <span class="score-stat-value" id="res-rsi">—</span>
-            </div>
-            <div class="score-stat">
-              <span class="score-stat-label">News Impact</span>
-              <span class="score-stat-value" id="res-news-impact">—</span>
+            <div class="action-right">
+              <div class="alloc-block">
+                <div class="alloc-label">Suggested amount</div>
+                <div class="alloc-usd" id="res-alloc-usd">—</div>
+                <div class="alloc-pct" id="res-alloc-pct">—</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Reasons -->
-      <div class="card reasons-card">
-        <h3>💡 Why</h3>
-        <ul class="reasons-list" id="res-reasons"></ul>
-      </div>
-
-      <!-- AI button / recommendation -->
-      <div class="card ai-card full-width">
-        <div class="ai-header">
-          <h3>🧠 AI Deep Analysis</h3>
-          <button id="recommend-btn" class="btn-ai">Get AI Recommendation</button>
+        <!-- Trade levels -->
+        <div class="card levels-card">
+          <h3>📍 Trade Levels</h3>
+          <div class="levels-grid">
+            <div class="level-item">
+              <span class="level-label">Entry</span>
+              <span class="level-value" id="res-entry">—</span>
+            </div>
+            <div class="level-item sl">
+              <span class="level-label">Stop-Loss</span>
+              <span class="level-value" id="res-sl">—</span>
+              <span class="level-pct" id="res-sl-pct"></span>
+            </div>
+            <div class="level-item tp">
+              <span class="level-label">Take-Profit</span>
+              <span class="level-value" id="res-tp">—</span>
+              <span class="level-pct" id="res-tp-pct"></span>
+            </div>
+          </div>
         </div>
-        <pre id="res-recommendation" class="hidden"></pre>
+
+        <!-- Score & confidence -->
+        <div class="card score-card">
+          <h3>📊 Signal Strength</h3>
+          <div class="score-row">
+            <div class="score-gauge-wrap">
+              <svg class="score-gauge" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#30363d" stroke-width="12" stroke-linecap="round"/>
+                <path id="gauge-arc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#d29922" stroke-width="12" stroke-linecap="round"
+                  stroke-dasharray="172.79" stroke-dashoffset="172.79"/>
+              </svg>
+              <div class="score-num-wrap">
+                <span class="score-num" id="res-score">—</span>
+                <span class="score-denom">/100</span>
+              </div>
+            </div>
+            <div class="score-details">
+              <div class="score-stat">
+                <span class="score-stat-label">Confidence</span>
+                <span class="score-stat-value" id="res-confidence">—</span>
+              </div>
+              <div class="score-stat">
+                <span class="score-stat-label">EMA Trend</span>
+                <span class="score-stat-value" id="res-ema-trend">—</span>
+              </div>
+              <div class="score-stat">
+                <span class="score-stat-label">RSI</span>
+                <span class="score-stat-value" id="res-rsi">—</span>
+              </div>
+              <div class="score-stat">
+                <span class="score-stat-label">News Impact</span>
+                <span class="score-stat-value" id="res-news-impact">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reasons -->
+        <div class="card reasons-card">
+          <h3>💡 Why</h3>
+          <ul class="reasons-list" id="res-reasons"></ul>
+        </div>
+
+        <!-- AI button / recommendation -->
+        <div class="card ai-card full-width">
+          <div class="ai-header">
+            <h3>🧠 AI Deep Analysis</h3>
+            <button id="recommend-btn" class="btn-ai">Get AI Recommendation</button>
+          </div>
+          <pre id="res-recommendation" class="hidden"></pre>
+        </div>
+
+      </section>
+    </div><!-- /tab-analyze -->
+
+
+    <!-- ══════════════════════════════
+         TAB: DASHBOARD
+    ══════════════════════════════ -->
+    <div id="tab-dashboard" class="tab-pane">
+
+      <div class="dash-toolbar">
+        <h2 class="dash-title">Bot Dashboard</h2>
+        <button id="dash-refresh-btn" class="btn-sm">↻ Refresh</button>
       </div>
 
-    </section>
+      <!-- KPI row -->
+      <div class="kpi-row">
+        <div class="kpi-card">
+          <div class="kpi-label">Bot Status</div>
+          <div class="kpi-value" id="d-status">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Trades Today</div>
+          <div class="kpi-value" id="d-trades">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Open Positions</div>
+          <div class="kpi-value" id="d-positions">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">AI Calls Left</div>
+          <div class="kpi-value" id="d-ai-calls">—</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Realized PnL Today</div>
+          <div class="kpi-value" id="d-pnl">—</div>
+        </div>
+      </div>
+
+      <!-- Open positions + risk limits row -->
+      <div class="dash-grid-2">
+
+        <!-- Open positions -->
+        <div class="card">
+          <h3>🗂️ Open Positions</h3>
+          <div id="d-open-positions-list" class="positions-list">
+            <span class="text-muted">No open positions</span>
+          </div>
+        </div>
+
+        <!-- Risk limits -->
+        <div class="card">
+          <h3>🛡️ Risk Limits</h3>
+          <div class="risk-limits-grid" id="d-risk-limits">
+            <!-- populated by JS -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Recent trade history -->
+      <div class="card full-width">
+        <h3>🕑 Recent Trades</h3>
+        <div class="table-wrap">
+          <table class="trades-table" id="d-trades-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Action</th>
+                <th>Price</th>
+                <th>Score</th>
+                <th>SL</th>
+                <th>TP</th>
+                <th>Alloc $</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="d-trades-tbody">
+              <tr><td colspan="8" class="text-muted text-center">No recent trades</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /tab-dashboard -->
+
+
+    <!-- ══════════════════════════════
+         TAB: SETTINGS
+    ══════════════════════════════ -->
+    <div id="tab-settings" class="tab-pane">
+
+      <div class="dash-toolbar">
+        <h2 class="dash-title">Risk & Strategy Settings</h2>
+        <span class="settings-note">Changes take effect immediately (in-memory; set env vars for persistence).</span>
+      </div>
+
+      <form id="settings-form" class="settings-form" novalidate>
+
+        <div class="settings-section">
+          <h3>💰 Account</h3>
+          <div class="settings-grid">
+            <div class="form-group">
+              <label for="s-balance">Account Balance (USD)</label>
+              <input type="number" id="s-balance" name="account_balance_usd" min="1" max="1000000" step="0.01" placeholder="e.g. 1000" />
+              <span class="form-hint">1 – 1,000,000</span>
+            </div>
+            <div class="form-group">
+              <label for="s-risk">Risk per Trade (%)</label>
+              <input type="number" id="s-risk" name="risk_per_trade_pct" min="0.1" max="5" step="0.1" placeholder="e.g. 1" />
+              <span class="form-hint">0.1 – 5.0 %</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>📍 Stop-Loss / Take-Profit</h3>
+          <div class="settings-grid">
+            <div class="form-group">
+              <label for="s-sl">Default Stop-Loss (%)</label>
+              <input type="number" id="s-sl" name="default_stop_loss_pct" min="0.5" max="10" step="0.1" placeholder="e.g. 2" />
+              <span class="form-hint">0.5 – 10.0 % (overridden by ATR when enabled)</span>
+            </div>
+            <div class="form-group">
+              <label for="s-tp">Default Take-Profit (%)</label>
+              <input type="number" id="s-tp" name="default_take_profit_pct" min="1" max="20" step="0.1" placeholder="e.g. 4" />
+              <span class="form-hint">1.0 – 20.0 %</span>
+            </div>
+            <div class="form-group">
+              <label for="s-atr-mult">ATR SL Multiplier</label>
+              <input type="number" id="s-atr-mult" name="atr_sl_multiplier" min="0" max="5" step="0.1" placeholder="e.g. 2" />
+              <span class="form-hint">0 = fixed % only · 2 = 2×ATR dynamic SL</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>🎯 Signal Thresholds</h3>
+          <div class="settings-grid">
+            <div class="form-group">
+              <label for="s-min-score">Min Signal Score (0–100)</label>
+              <input type="number" id="s-min-score" name="min_signal_score" min="50" max="90" step="1" placeholder="e.g. 65" />
+              <span class="form-hint">50 – 90 (lower = more signals, more risk)</span>
+            </div>
+            <div class="form-group">
+              <label for="s-chop-adx">Chop ADX Threshold</label>
+              <input type="number" id="s-chop-adx" name="chop_adx_threshold" min="0" max="40" step="1" placeholder="e.g. 20" />
+              <span class="form-hint">0 = disabled · 20 = skip trades when ADX &lt; 20</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>⏱️ Trade Controls</h3>
+          <div class="settings-grid">
+            <div class="form-group">
+              <label for="s-cooldown">Trade Cooldown (seconds)</label>
+              <input type="number" id="s-cooldown" name="trade_cooldown_secs" min="0" max="3600" step="30" placeholder="e.g. 300" />
+              <span class="form-hint">0 = disabled · 300 = 5-min cooldown per symbol</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-footer">
+          <button type="submit" class="btn-save" id="save-settings-btn">💾 Save Settings</button>
+          <div id="settings-feedback" class="settings-feedback hidden"></div>
+        </div>
+
+      </form>
+
+      <!-- Current config display -->
+      <div class="card" style="margin-top:1.5rem">
+        <h3>📋 Current Configuration</h3>
+        <div class="risk-limits-grid" id="s-current-config">
+          <!-- populated by JS -->
+        </div>
+      </div>
+
+    </div><!-- /tab-settings -->
+
   </main>
 
   <footer>

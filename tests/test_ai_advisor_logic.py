@@ -25,6 +25,9 @@ _cfg.MAX_AI_CALLS_PER_HOUR = 5
 _cfg.AI_ENABLED  = True
 _cfg.OPENAI_API_KEY = "test-key"
 _cfg.OPENAI_MODEL = "gpt-4o"
+_cfg.TRADE_COOLDOWN_SECS = 0   # disabled for most tests
+_cfg.CHOP_ADX_THRESHOLD  = 20.0
+_cfg.ATR_SL_MULTIPLIER   = 0.0  # use fixed SL in tests to keep assertions simple
 
 import ai_advisor
 from ai_advisor import ai_call_allowed, _record_ai_call, _ai_call_bucket, _ai_calls_remaining
@@ -78,12 +81,12 @@ class TestSmartScoreThresholds:
     We mock full_analysis and analyze_news_impact to control the score.
     """
 
-    def _make_market_data(self, direction="LONG", confidence=80.0):
+    def _make_market_data(self, direction="LONG", confidence=80.0, adx=30.0):
         return {
             "symbol": "TEST",
             "price": 100.0,
             "prediction": {"direction": direction, "confidence": confidence, "cv_accuracy": 60.0, "features": {}},
-            "indicators": {"rsi": 50.0, "macd": 0.01, "adx": 15.0, "atr": 1.0, "ema_trend": "MIXED"},
+            "indicators": {"rsi": 50.0, "macd": 0.01, "adx": adx, "atr": 1.0, "ema_trend": "MIXED"},
         }
 
     def _make_news_data(self, impact="LOW", score=0.1):
@@ -131,6 +134,32 @@ class TestSmartScoreThresholds:
         for key in ("base", "ml_delta", "rsi_delta", "ema_delta", "adx_delta", "news_delta"):
             assert key in result["score_breakdown"]
 
+    def test_macd_delta_in_breakdown(self):
+        """MACD delta should be present in score_breakdown."""
+        with patch("ai_advisor.full_analysis", return_value=self._make_market_data()), \
+             patch("ai_advisor.analyze_news_impact", return_value=self._make_news_data()):
+            result = ai_advisor.get_smart_score("TEST")
+        assert "macd_delta" in result["score_breakdown"]
+
+    def test_positive_macd_increases_score(self):
+        data_pos = self._make_market_data("LONG", 70.0)
+        data_pos["indicators"]["macd"] = 0.05  # positive
+
+        data_neg = self._make_market_data("LONG", 70.0)
+        data_neg["indicators"]["macd"] = -0.05  # negative
+
+        news = self._make_news_data()
+
+        with patch("ai_advisor.full_analysis", return_value=data_pos), \
+             patch("ai_advisor.analyze_news_impact", return_value=news):
+            result_pos = ai_advisor.get_smart_score("TEST")
+
+        with patch("ai_advisor.full_analysis", return_value=data_neg), \
+             patch("ai_advisor.analyze_news_impact", return_value=news):
+            result_neg = ai_advisor.get_smart_score("TEST")
+
+        assert result_pos["smart_score"] > result_neg["smart_score"]
+
 
 # ---------------------------------------------------------------------------
 # get_actionable_signal action rules
@@ -140,13 +169,13 @@ class TestActionableSignal:
     def setup_method(self):
         _ai_call_bucket.clear()
 
-    def _make_market_data(self, direction="LONG", confidence=85.0):
+    def _make_market_data(self, direction="LONG", confidence=85.0, adx=30.0, atr=2.0):
         ema = "BULLISH" if direction == "LONG" else "BEARISH"
         return {
             "symbol": "TEST",
             "price": 100.0,
             "prediction": {"direction": direction, "confidence": confidence, "cv_accuracy": 65.0, "features": {}},
-            "indicators": {"rsi": 50.0, "macd": 0.01, "adx": 30.0, "atr": 1.0, "ema_trend": ema},
+            "indicators": {"rsi": 50.0, "macd": 0.01, "adx": adx, "atr": atr, "ema_trend": ema},
         }
 
     def _make_news_data(self):
@@ -193,3 +222,36 @@ class TestActionableSignal:
              patch("ai_advisor.analyze_news_impact", return_value=self._make_news_data()):
             result = ai_advisor.get_actionable_signal("TEST")
         assert isinstance(result["reasons"], list)
+
+    def test_choppiness_filter_blocks_trade(self):
+        """When ADX is below CHOP_ADX_THRESHOLD, action should be HOLD."""
+        # Use ADX=10 which is below the threshold of 20
+        low_adx_data = self._make_market_data("LONG", 90.0, adx=10.0)
+        with patch("ai_advisor.full_analysis", return_value=low_adx_data), \
+             patch("ai_advisor.analyze_news_impact", return_value=self._make_news_data()):
+            result = ai_advisor.get_actionable_signal("TEST")
+        assert result["action"] == "HOLD"
+        assert any("Choppy" in r or "ADX" in r for r in result["reasons"])
+
+    def test_choppiness_filter_passes_strong_trend(self):
+        """When ADX is above threshold, a strong signal should not be blocked."""
+        high_adx_data = self._make_market_data("LONG", 90.0, adx=35.0)
+        with patch("ai_advisor.full_analysis", return_value=high_adx_data), \
+             patch("ai_advisor.analyze_news_impact", return_value=self._make_news_data()):
+            result = ai_advisor.get_actionable_signal("TEST")
+        # Should be BUY, not HOLD due to ADX
+        assert result["action"] == "BUY"
+
+    def test_choppiness_filter_disabled_at_zero(self):
+        """CHOP_ADX_THRESHOLD=0 disables the filter."""
+        _cfg.CHOP_ADX_THRESHOLD = 0.0
+        try:
+            low_adx_data = self._make_market_data("LONG", 90.0, adx=5.0)
+            with patch("ai_advisor.full_analysis", return_value=low_adx_data), \
+                 patch("ai_advisor.analyze_news_impact", return_value=self._make_news_data()):
+                result = ai_advisor.get_actionable_signal("TEST")
+            # Should not be blocked by choppiness
+            assert not any("Choppy" in r for r in result["reasons"])
+        finally:
+            _cfg.CHOP_ADX_THRESHOLD = 20.0
+

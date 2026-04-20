@@ -80,3 +80,17 @@ DEFAULT_TAKE_PROFIT_PCT: float = _get_float("DEFAULT_TAKE_PROFIT_PCT", 4.0)
 # ---------------------------------------------------------------------------
 MAX_AI_CALLS_PER_HOUR: int = _get_int("MAX_AI_CALLS_PER_HOUR", 20)
 AI_ENABLED: bool = _get_bool("AI_ENABLED", True)
+
+# ---------------------------------------------------------------------------
+# Advanced signal / safety settings
+# ---------------------------------------------------------------------------
+
+# Minimum seconds between consecutive trades on the same symbol (0 = disabled).
+TRADE_COOLDOWN_SECS: int = _get_int("TRADE_COOLDOWN_SECS", 300)
+
+# ADX below this value indicates a choppy/ranging market — skip new trades.
+CHOP_ADX_THRESHOLD: float = _get_float("CHOP_ADX_THRESHOLD", 20.0)
+
+# ATR multiplier used when computing a dynamic stop-loss distance.
+# SL distance = ATR_SL_MULTIPLIER × ATR.  Set to 0 to use fixed DEFAULT_STOP_LOSS_PCT.
+ATR_SL_MULTIPLIER: float = _get_float("ATR_SL_MULTIPLIER", 2.0)
