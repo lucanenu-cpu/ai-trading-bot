@@ -94,6 +94,30 @@ def smart_score(symbol: str):
         return jsonify({"success": False, "error": "Scoring failed."}), 500
 
 
+@app.route("/api/chart-data/<symbol>")
+def api_chart_data(symbol: str):
+    """Return daily close price history for Chart.js rendering (last 30 trading days)."""
+    try:
+        symbol = symbol.upper()
+        from market_analyzer import fetch_market_data
+        df = fetch_market_data(symbol, period="30d", interval="1d")
+        if df.empty:
+            return jsonify({"success": False, "error": "No data available"}), 404
+
+        dates = [str(d)[:10] for d in df.index]
+        closes = [round(float(c), 4) for c in df["Close"]]
+
+        return jsonify({
+            "success": True,
+            "symbol": symbol,
+            "dates": dates,
+            "closes": closes,
+        })
+    except Exception as exc:
+        logger.exception("Error fetching chart data for %s", symbol)
+        return jsonify({"success": False, "error": "Chart data unavailable"}), 500
+
+
 @app.route("/api/recommendation/<symbol>")
 def api_recommendation(symbol: str):
     """

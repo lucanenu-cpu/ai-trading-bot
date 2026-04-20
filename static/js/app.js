@@ -20,6 +20,9 @@
   // Search mode: "symbol" or "ask"
   let searchMode = "symbol";
 
+  // Chart.js instance — destroyed and recreated on each analysis
+  let priceChartInstance = null;
+
   // ------------------------------------------------------------------
   // Tab switching
   // ------------------------------------------------------------------
@@ -297,11 +300,161 @@
       });
     }
 
+    // ── Price chart (Chart.js primary) ──
+    renderPriceChart(data.symbol, risk, action);
+
     // ── Embedded TradingView chart ──
     renderTradingViewChart(resolved, data.symbol);
 
     // Update header status after a signal load
     refreshHeaderStatus();
+  }
+
+  // ------------------------------------------------------------------
+  // Render Chart.js price chart with entry / SL / TP level lines.
+  // Uses /api/chart-data/<symbol> for 30-day daily close prices.
+  // ------------------------------------------------------------------
+  function renderPriceChart(symbol, risk, action) {
+    const canvas  = document.getElementById("price-chart");
+    const emptyEl = document.getElementById("chart-empty");
+    if (!canvas) return;
+
+    // Destroy any previously rendered chart to free the canvas.
+    if (priceChartInstance) {
+      priceChartInstance.destroy();
+      priceChartInstance = null;
+    }
+
+    if (!symbol) {
+      canvas.style.display = "none";
+      if (emptyEl) emptyEl.classList.remove("hidden");
+      return;
+    }
+
+    fetch(`/api/chart-data/${encodeURIComponent(symbol)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.success || !data.closes || data.closes.length === 0) {
+          canvas.style.display = "none";
+          if (emptyEl) emptyEl.classList.remove("hidden");
+          return;
+        }
+
+        canvas.style.display = "block";
+        if (emptyEl) emptyEl.classList.add("hidden");
+
+        const { dates, closes } = data;
+        const showLevels = action !== "HOLD";
+        const entry = risk && risk.entry   != null ? risk.entry   : null;
+        const sl    = risk && risk.stop_loss    != null ? risk.stop_loss    : null;
+        const tp    = risk && risk.take_profit  != null ? risk.take_profit  : null;
+
+        const datasets = [
+          {
+            label: symbol,
+            data: closes,
+            borderColor: "#58a6ff",
+            backgroundColor: "rgba(88,166,255,0.08)",
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            fill: true,
+            tension: 0.2,
+            order: 0,
+          },
+        ];
+
+        if (showLevels && entry != null) {
+          datasets.push({
+            label: "Entry",
+            data: dates.map(() => entry),
+            borderColor: "#58a6ff",
+            borderWidth: 1.5,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            fill: false,
+            order: 1,
+          });
+        }
+        if (showLevels && sl != null) {
+          datasets.push({
+            label: "Stop-Loss",
+            data: dates.map(() => sl),
+            borderColor: "#f85149",
+            borderWidth: 1.5,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            fill: false,
+            order: 2,
+          });
+        }
+        if (showLevels && tp != null) {
+          datasets.push({
+            label: "Take-Profit",
+            data: dates.map(() => tp),
+            borderColor: "#3fb950",
+            borderWidth: 1.5,
+            borderDash: [6, 4],
+            pointRadius: 0,
+            fill: false,
+            order: 3,
+          });
+        }
+
+        priceChartInstance = new Chart(canvas.getContext("2d"), {
+          type: "line",
+          data: { labels: dates, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: {
+                display: true,
+                labels: { color: "#e6edf3", boxWidth: 20, font: { size: 11 } },
+              },
+              tooltip: {
+                backgroundColor: "#21262d",
+                borderColor: "#30363d",
+                borderWidth: 1,
+                titleColor: "#e6edf3",
+                bodyColor: "#8b949e",
+                callbacks: {
+                  label: (ctx) => {
+                    const val = ctx.parsed.y;
+                    if (val == null) return "";
+                    const fmt = val >= 100
+                      ? "$" + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                      : "$" + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+                    return ` ${ctx.dataset.label}: ${fmt}`;
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: { color: "#8b949e", maxTicksLimit: 8, font: { size: 11 } },
+                grid: { color: "#21262d" },
+              },
+              y: {
+                ticks: {
+                  color: "#8b949e",
+                  font: { size: 11 },
+                  callback: (v) => {
+                    if (v >= 100) return "$" + v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                    return "$" + Number(v).toFixed(2);
+                  },
+                },
+                grid: { color: "#21262d" },
+              },
+            },
+          },
+        });
+      })
+      .catch(() => {
+        canvas.style.display = "none";
+        if (emptyEl) emptyEl.classList.remove("hidden");
+      });
   }
 
   // ------------------------------------------------------------------
