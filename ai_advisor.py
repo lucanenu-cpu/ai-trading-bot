@@ -361,9 +361,10 @@ def get_actionable_signal(symbol: str) -> dict:
 
     # --- Choppiness / low-trend filter ---
     # When ADX is below the configured threshold the market is ranging — skip trade
-    # to avoid overtrading in choppy conditions.
+    # to avoid overtrading in choppy conditions.  Guard on threshold > 0 so the
+    # feature can be disabled cleanly by setting CHOP_ADX_THRESHOLD=0.
     adx = score_data.get("indicators", {}).get("adx", 25.0)
-    if raw_action != "HOLD" and adx < config.CHOP_ADX_THRESHOLD:
+    if raw_action != "HOLD" and config.CHOP_ADX_THRESHOLD > 0 and adx < config.CHOP_ADX_THRESHOLD:
         logger.info(
             "ActionableSignal: choppiness filter blocked %s — ADX=%.1f < %.1f",
             symbol, adx, config.CHOP_ADX_THRESHOLD,
