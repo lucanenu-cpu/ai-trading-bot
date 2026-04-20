@@ -110,6 +110,8 @@
     hideError();
     resRec.classList.add("hidden");
     resRec.textContent = "";
+    // Show chart skeleton while request is in flight
+    showChartLoading();
 
     fetch(`/api/recommendation/${encodeURIComponent(symbol)}`)
       .then(checkStatus)
@@ -120,6 +122,7 @@
       .catch((err) => {
         showError(err.message || "Analysis failed. Please try again.");
         hideLoading();
+        showChartError("Chart unavailable — analysis failed.");
       });
   }
 
@@ -131,6 +134,7 @@
     hideError();
     resRec.classList.add("hidden");
     resRec.textContent = "";
+    showChartLoading();
 
     fetch("/api/ask?" + new URLSearchParams({ q: query }))
       .then(checkStatus)
@@ -147,6 +151,7 @@
       .catch((err) => {
         showError(err.message || "Auto-analysis failed. Please try again.");
         hideLoading();
+        showChartError("Chart unavailable — analysis failed.");
       });
   }
 
@@ -298,7 +303,9 @@
     }
 
     // ── Embedded TradingView chart ──
-    renderTradingViewChart(resolved, data.symbol);
+    const tfSelect = document.getElementById("timeframe-select");
+    const interval = tfSelect ? tfSelect.value : "60";
+    renderTradingViewChart(resolved, data.symbol, interval);
 
     // Update header status after a signal load
     refreshHeaderStatus();
@@ -309,7 +316,7 @@
   // Builds "EXCHANGE:SYMBOL" when we have one (from resolved), otherwise
   // falls back to the raw ticker — TradingView will auto-resolve.
   // ------------------------------------------------------------------
-  function renderTradingViewChart(resolved, rawSymbol) {
+  function renderTradingViewChart(resolved, rawSymbol, interval) {
     const container = document.getElementById("tv-chart-container");
     if (!container) return;
 
@@ -318,7 +325,7 @@
     const type = resolved && resolved.type ? resolved.type : "";
 
     if (!sym) {
-      container.innerHTML = '<div class="chart-empty">No chart available.</div>';
+      showChartError("No chart available.");
       return;
     }
 
@@ -336,7 +343,11 @@
     }
 
     // Recreate container to fully reset any previous widget.
+    // The outer div must carry tradingview-widget-container so TradingView's
+    // embed script can locate its host element via parentElement class lookup.
     container.innerHTML = "";
+    container.className = "tv-chart-container tradingview-widget-container";
+
     const widgetDiv = document.createElement("div");
     widgetDiv.className = "tradingview-widget-container__widget";
     widgetDiv.style.height = "100%";
@@ -347,10 +358,12 @@
     script.type = "text/javascript";
     script.async = true;
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.innerHTML = JSON.stringify({
+    // Use textContent (not innerHTML) so the config is readable as plain text
+    // by TradingView's script via document.currentScript.textContent.
+    script.textContent = JSON.stringify({
       autosize: true,
       symbol: tvSymbol,
-      interval: "60",
+      interval: interval || "60",
       timezone: "Etc/UTC",
       theme: "dark",
       style: "1",
@@ -681,6 +694,36 @@
   function showResults() {
     hideLoading();
     results.classList.remove("hidden");
+  }
+
+  // ------------------------------------------------------------------
+  // Chart loading / error state helpers
+  // ------------------------------------------------------------------
+  function showChartLoading() {
+    const container = document.getElementById("tv-chart-container");
+    if (!container) return;
+    container.className = "tv-chart-container";
+    container.innerHTML = "";
+    const wrap = document.createElement("div");
+    wrap.className = "chart-loading";
+    const spin = document.createElement("div");
+    spin.className = "spinner chart-loading-spinner";
+    const txt = document.createElement("p");
+    txt.textContent = "Loading chart…";
+    wrap.appendChild(spin);
+    wrap.appendChild(txt);
+    container.appendChild(wrap);
+  }
+
+  function showChartError(msg) {
+    const container = document.getElementById("tv-chart-container");
+    if (!container) return;
+    container.className = "tv-chart-container";
+    container.innerHTML = "";
+    const div = document.createElement("div");
+    div.className = "chart-empty";
+    div.textContent = msg || "Chart unavailable.";
+    container.appendChild(div);
   }
 })();
 

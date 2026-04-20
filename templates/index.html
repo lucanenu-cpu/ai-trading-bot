@@ -56,6 +56,15 @@
             placeholder="Symbol — e.g. AAPL, BTC-USD, SPY"
             autocomplete="off"
           />
+          <select id="timeframe-select" title="Chart timeframe">
+            <option value="1">1m</option>
+            <option value="5">5m</option>
+            <option value="15">15m</option>
+            <option value="60" selected>1H</option>
+            <option value="240">4H</option>
+            <option value="D">1D</option>
+            <option value="W">1W</option>
+          </select>
           <button id="analyze-btn">⚡ Analyze</button>
         </div>
         <div id="error-msg" class="error-msg hidden"></div>
@@ -110,7 +119,9 @@
             <span class="chart-note" id="chart-note">Live chart — data matches the numbers shown above.</span>
           </div>
           <div class="tv-chart-wrap">
-            <div id="tv-chart-container" class="tv-chart-container"></div>
+            <div id="tv-chart-container" class="tv-chart-container">
+              <div class="chart-empty">Enter a symbol above and click Analyze to load the chart.</div>
+            </div>
           </div>
         </div>
 

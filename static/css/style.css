@@ -162,6 +162,20 @@ main {
 }
 #symbol-input:focus { border-color: var(--accent); }
 
+#timeframe-select {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+}
+#timeframe-select:focus { border-color: var(--accent); }
+
 button {
   padding: 0.65rem 1.25rem;
   border: none;
@@ -614,6 +628,7 @@ footer strong { color: var(--yellow); }
 @media (max-width: 420px) {
   .kpi-row { grid-template-columns: 1fr 1fr; }
   .settings-grid { grid-template-columns: 1fr; }
+  #timeframe-select { font-size: 0.8rem; padding: 0.5rem 0.5rem; }
 }
 
 /* ══════════════════════════════════════════
@@ -662,6 +677,22 @@ footer strong { color: var(--yellow); }
   height: 100%;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+.chart-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  gap: 0.25rem;
+}
+.chart-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+  margin: 0 auto 0.25rem;
 }
 
 /* Meta line under symbol (exchange / description / type) */
