@@ -72,7 +72,7 @@ def analyze(symbol: str):
 
 @app.route("/recommend/<symbol>")
 def recommend(symbol: str):
-    """Return a GPT‑4o trade recommendation for a symbol."""
+    """Return a GPT trade recommendation for a symbol (legacy endpoint)."""
     try:
         symbol = symbol.upper()
         recommendation = get_trade_recommendation(symbol)
@@ -80,7 +80,6 @@ def recommend(symbol: str):
     except Exception as exc:
         logger.exception("Error generating recommendation for %s", symbol)
         return jsonify({"success": False, "error": "Recommendation failed. Please try again."}), 500
-
 
 @app.route("/api/score/<symbol>")
 def smart_score(symbol: str):
@@ -93,6 +92,50 @@ def smart_score(symbol: str):
     except Exception as exc:
         logger.exception("Error scoring %s", symbol)
         return jsonify({"success": False, "error": "Scoring failed."}), 500
+
+
+@app.route("/api/recommendation/<symbol>")
+def api_recommendation(symbol: str):
+    """
+    Return a unified actionable signal with BUY/SELL/HOLD action,
+    allocation recommendation, SL/TP levels, and reasons.
+    """
+    try:
+        symbol = symbol.upper()
+        from ai_advisor import get_actionable_signal
+        signal = get_actionable_signal(symbol)
+        return jsonify({"success": True, **signal})
+    except Exception as exc:
+        logger.exception("Error generating actionable signal for %s", symbol)
+        return jsonify({"success": False, "error": "Signal generation failed. Please try again."}), 500
+
+
+@app.route("/api/risk-state")
+def api_risk_state():
+    """Return current risk state for diagnostics."""
+    import risk_manager
+    state = risk_manager.get_state()
+    risk_manager.reset_daily_if_needed(state)
+    return jsonify({
+        "success": True,
+        "date": state.date.isoformat(),
+        "trades_today": state.trades_today,
+        "realized_pnl_today": state.realized_pnl_today,
+        "open_positions": state.open_positions,
+        "limits": {
+            "max_trades_per_day": config.MAX_TRADES_PER_DAY,
+            "max_open_positions": config.MAX_OPEN_POSITIONS,
+            "max_daily_loss_pct": config.MAX_DAILY_LOSS_PCT,
+            "account_balance_usd": config.ACCOUNT_BALANCE_USD,
+            "risk_per_trade_pct": config.RISK_PER_TRADE_PCT,
+            "min_signal_score": config.MIN_SIGNAL_SCORE,
+            "strong_signal_score": config.STRONG_SIGNAL_SCORE,
+            "default_stop_loss_pct": config.DEFAULT_STOP_LOSS_PCT,
+            "default_take_profit_pct": config.DEFAULT_TAKE_PROFIT_PCT,
+            "max_ai_calls_per_hour": config.MAX_AI_CALLS_PER_HOUR,
+            "ai_enabled": config.AI_ENABLED,
+        },
+    })
 
 
 @app.route("/news/<symbol>")
@@ -166,7 +209,16 @@ def test_telegram():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok"})
+    import risk_manager
+    from ai_advisor import _ai_calls_remaining
+    state = risk_manager.get_state()
+    return jsonify({
+        "status": "ok",
+        "ai_enabled": config.AI_ENABLED,
+        "ai_calls_remaining_this_hour": _ai_calls_remaining(),
+        "trades_today": state.trades_today,
+        "open_positions": len(state.open_positions),
+    })
 
 
 # ---------------------------------------------------------------------------

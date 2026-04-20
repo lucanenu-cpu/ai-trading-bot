@@ -67,13 +67,79 @@ def send_sms(message: str) -> bool:
 # Formatters
 # ---------------------------------------------------------------------------
 
+def format_actionable_signal(symbol: str, signal: dict) -> str:
+    """
+    Return an HTML-formatted Telegram message for an actionable BUY/SELL/HOLD signal.
+
+    signal is the dict returned by ai_advisor.get_actionable_signal().
+    """
+    action = signal.get("action", "HOLD")
+    score = signal.get("score", 0)
+    price = signal.get("price", 0)
+    confidence = signal.get("confidence", 0)
+    reasons = signal.get("reasons", [])
+    risk = signal.get("risk", {})
+    ai_used = signal.get("ai_used", False)
+
+    now = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    # Action emoji and colour hint
+    if action == "BUY":
+        action_emoji = "🟢"
+        action_label = "BUY"
+    elif action == "SELL":
+        action_emoji = "🔴"
+        action_label = "SELL"
+    else:
+        action_emoji = "🟡"
+        action_label = "HOLD"
+
+    alloc_usd = risk.get("allocation_usd", 0)
+    alloc_pct = risk.get("allocation_pct", 0)
+    entry = risk.get("entry", price)
+    sl = risk.get("stop_loss", 0)
+    tp = risk.get("take_profit", 0)
+    sl_pct = risk.get("stop_loss_pct", 0)
+    tp_pct = risk.get("take_profit_pct", 0)
+
+    reasons_text = "\n".join(
+        f"  • {_html_escape(r)}" for r in reasons[:5]
+    ) or "  • N/A"
+
+    ai_note = " 🧠 AI" if ai_used else " 📊 Local"
+
+    msg = (
+        f"{action_emoji} <b>SIGNAL: {action_label} — {symbol}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 <b>Price:</b> ${price:,.4f}\n"
+        f"📊 <b>Score:</b> {score:.0f}/100 | Confidence: {confidence:.0f}%{ai_note}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💵 <b>How much to invest:</b>\n"
+        f"  ${alloc_usd:.2f} ({alloc_pct:.1f}% of your balance)\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎯 <b>Trade levels:</b>\n"
+        f"  Entry:       ${entry:,.4f}\n"
+        f"  Stop-Loss:   ${sl:,.4f} (-{sl_pct:.1f}%)\n"
+        f"  Take-Profit: ${tp:,.4f} (+{tp_pct:.1f}%)\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📋 <b>Why:</b>\n{reasons_text}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🕐 {now}\n"
+        f"<i>⚠️ Not financial advice. Trade responsibly.</i>"
+    )
+    return msg
+
+
 def format_trade_signal(symbol: str, analysis: dict) -> str:
     """
     Return an HTML‑formatted Telegram message for a trade signal.
 
-    analysis keys expected: price, prediction (dict), indicators (dict),
-    news (dict from analyze_news_impact), recommendation (str from GPT).
+    Supports both the new 'signal' key (actionable signal dict) and the legacy format.
     """
+    # Prefer new structured signal if available
+    if "signal" in analysis:
+        return format_actionable_signal(symbol, analysis["signal"])
+
     pred = analysis.get("prediction", {})
     ind = analysis.get("indicators", {})
     news = analysis.get("news", {})
@@ -104,7 +170,7 @@ def format_trade_signal(symbol: str, analysis: dict) -> str:
         f"  ATR: {ind.get('atr', 'N/A')}\n"
         f"  EMA Trend: {ind.get('ema_trend', 'N/A')}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🧠 <b>AI Recommendation</b>\n{rec}\n"
+        f"🧠 <b>Recommendation</b>\n{rec}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🕐 {now}\n"
         f"<i>⚠️ Not financial advice. Trade responsibly.</i>"
@@ -132,22 +198,36 @@ def format_high_impact_alert(event: dict) -> str:
     msg = (
         f"🚨 <b>HIGH‑IMPACT NEWS ALERT</b> 🚨\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"📰 <b>{event.get('title', '')}</b>\n\n"
-        f"📋 <b>Summary:</b> {event_summary}\n"
+        f"📰 <b>{_html_escape(event.get('title', ''))}</b>\n\n"
+        f"📋 <b>Summary:</b> {_html_escape(event_summary)}\n"
         f"🎯 <b>Direction:</b> {direction}\n"
         f"⚡ <b>Magnitude:</b> {magnitude}\n"
         f"📉 <b>Expected Move:</b> {expected_move}\n"
         f"⏱ <b>Time Horizon:</b> {time_horizon}\n"
         f"😐 <b>Sentiment:</b> {sentiment_label}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🏦 <b>Affected Assets:</b> {affected}\n"
-        f"⚠️ <b>Key Risk:</b> {key_risk}\n"
+        f"🏦 <b>Affected Assets:</b> {_html_escape(affected)}\n"
+        f"⚠️ <b>Key Risk:</b> {_html_escape(key_risk)}\n"
         f"✅ <b>Recommended Action:</b> {recommended_action}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🕐 {now}\n"
         f"<i>⚠️ Not financial advice. Trade responsibly.</i>"
     )
     return msg
+
+
+# ---------------------------------------------------------------------------
+# HTML escaping helper
+# ---------------------------------------------------------------------------
+
+def _html_escape(text: str) -> str:
+    """Escape characters that would break Telegram HTML parse mode."""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
 
 
 # ---------------------------------------------------------------------------
