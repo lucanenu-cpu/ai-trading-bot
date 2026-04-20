@@ -1,4 +1,5 @@
 import datetime
+import logging
 import threading
 import time
 from datetime import timezone
@@ -11,6 +12,9 @@ except ImportError:
 from market_analyzer import full_analysis
 from news_sentiment import analyze_news_impact
 from notifications import send_alert, send_trade_alert, send_news_alert
+import risk_manager
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -39,11 +43,10 @@ def is_market_hours() -> bool:
     try:
         tz = ZoneInfo("America/New_York")
     except Exception:
-        # Fallback: approximate with UTC-5 if zoneinfo unavailable
         now_et = datetime.datetime.now(timezone.utc) - datetime.timedelta(hours=5)
         return now_et.weekday() < 5 and 9 <= now_et.hour < 16
     now_et = datetime.datetime.now(tz)
-    if now_et.weekday() >= 5:  # Saturday=5, Sunday=6
+    if now_et.weekday() >= 5:
         return False
     return 9 <= now_et.hour < 16
 
@@ -69,60 +72,76 @@ def scan_markets() -> None:
     """
     Analyze each symbol in the watchlist and send alerts for strong signals.
 
-    Alert criteria:
-    - AI direction and news impact aligned with confidence > 70 %, OR
-    - Model confidence > 80 % regardless of news
-    - 4‑hour per‑symbol cooldown
+    Uses the new actionable signal engine with risk gate integration.
+    Sends BUY/SELL alerts only; skips HOLD unless signal is strong.
     """
+    from ai_advisor import get_actionable_signal
+
+    risk_manager.reset_daily_if_needed()
+
     for symbol in WATCHLIST:
-        # Crypto trades 24/7; equities only during market hours
         if not is_crypto(symbol) and not is_market_hours():
             continue
 
         try:
-            market_data = full_analysis(symbol)
-            news_data = analyze_news_impact(symbol)
+            signal = get_actionable_signal(symbol)
+            action = signal["action"]
+            score = signal["score"]
 
-            pred = market_data["prediction"]
-            confidence = pred.get("confidence", 0)
-            direction = pred.get("direction", "")
-            overall_impact = news_data.get("overall_impact", "LOW")
-
-            # Determine if news and ML are aligned
-            news_bullish = overall_impact in ("HIGH", "MEDIUM") and any(
-                ev.get("deep_analysis", {}).get("impact_direction") == "BULLISH"
-                for ev in news_data.get("high_impact_events", [])
-            )
-            news_bearish = overall_impact in ("HIGH", "MEDIUM") and any(
-                ev.get("deep_analysis", {}).get("impact_direction") == "BEARISH"
-                for ev in news_data.get("high_impact_events", [])
+            logger.info(
+                "Scan: %s action=%s score=%.1f confidence=%.1f",
+                symbol, action, score, signal.get("confidence", 0),
             )
 
-            aligned = (
-                (direction == "LONG" and news_bullish) or
-                (direction == "SHORT" and news_bearish)
-            )
+            if action == "HOLD":
+                reasons_str = "; ".join(signal.get("reasons", [])[:2])
+                logger.info("Scan: skipping %s (HOLD) — %s", symbol, reasons_str)
+                continue
 
-            should_alert = (
-                (aligned and confidence > 70) or
-                (confidence > 80)
-            )
+            if not _cooldown_ok(symbol):
+                logger.info("Scan: skipping %s — cooldown active", symbol)
+                continue
 
-            if should_alert and _cooldown_ok(symbol):
-                analysis = {
-                    **market_data,
-                    "news": news_data,
-                    "recommendation": f"{direction} signal with {confidence:.1f}% confidence",
-                }
-                send_trade_alert(symbol, analysis)
-                _alert_cooldowns[symbol] = datetime.datetime.now(timezone.utc)
+            # Build analysis payload compatible with send_trade_alert
+            analysis = {
+                "price": signal["price"],
+                "prediction": {
+                    "direction": "LONG" if action == "BUY" else "SHORT",
+                    "confidence": signal.get("confidence", 0),
+                    "cv_accuracy": 0,
+                },
+                "indicators": signal.get("indicators", {}),
+                "news": {"overall_impact": signal.get("news_impact", "LOW"), "impact_score": 0},
+                "recommendation": _build_action_summary(signal),
+                # New structured fields for updated formatter
+                "signal": signal,
+            }
+
+            send_trade_alert(symbol, analysis)
+            _alert_cooldowns[symbol] = datetime.datetime.now(timezone.utc)
+            risk_manager.record_trade(symbol)
 
         except Exception as exc:
+            logger.error("Scan error for %s: %s", symbol, exc)
             send_alert(f"⚠️ Error scanning {symbol}: {exc}", urgent=False)
 
 
+def _build_action_summary(signal: dict) -> str:
+    """Build a concise text summary of an actionable signal for legacy formatters."""
+    r = signal.get("risk", {})
+    lines = [
+        f"Action: {signal['action']}",
+        f"Score: {signal['score']:.0f}/100",
+        f"Entry: ${r.get('entry', signal['price']):.2f}",
+        f"Stop-Loss: ${r.get('stop_loss', 0):.2f} (-{r.get('stop_loss_pct', 0):.1f}%)",
+        f"Take-Profit: ${r.get('take_profit', 0):.2f} (+{r.get('take_profit_pct', 0):.1f}%)",
+        f"Suggested: ${r.get('allocation_usd', 0):.2f} ({r.get('allocation_pct', 0):.1f}% of balance)",
+    ]
+    return "\n".join(lines)
+
+
 def scan_news() -> None:
-    """Check all watchlist symbols for high‑impact news events."""
+    """Check all watchlist symbols for high-impact news events."""
     for symbol in WATCHLIST:
         try:
             news_data = analyze_news_impact(symbol)
@@ -132,6 +151,7 @@ def scan_news() -> None:
                     _alerted_news_titles.add(title)
                     send_news_alert(event)
         except Exception as exc:
+            logger.error("News scan error for %s: %s", symbol, exc)
             send_alert(f"⚠️ Error scanning news for {symbol}: {exc}", urgent=False)
 
 
@@ -181,3 +201,4 @@ def start_scheduler_thread() -> None:
     _scheduler_started = True
     _scheduler_thread = threading.Thread(target=run_scheduler, daemon=True, name="scheduler")
     _scheduler_thread.start()
+    logger.info("Scheduler thread started")

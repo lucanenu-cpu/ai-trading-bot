@@ -1,18 +1,18 @@
 /* =====================================================================
-   AI Trading Bot Dashboard — Client JS
+   AI Trading Bot — Client JS (v2)
    ===================================================================== */
 
 (function () {
   "use strict";
 
-  const symbolInput = document.getElementById("symbol-input");
-  const analyzeBtn = document.getElementById("analyze-btn");
-  const recommendBtn = document.getElementById("recommend-btn");
-  const errorMsg = document.getElementById("error-msg");
-  const loading = document.getElementById("loading");
-  const results = document.getElementById("results");
-  const recommendationCard = document.getElementById("recommendation-card");
-  const watchlistChips = document.getElementById("watchlist-chips");
+  const symbolInput   = document.getElementById("symbol-input");
+  const analyzeBtn    = document.getElementById("analyze-btn");
+  const recommendBtn  = document.getElementById("recommend-btn");
+  const errorMsg      = document.getElementById("error-msg");
+  const loading       = document.getElementById("loading");
+  const results       = document.getElementById("results");
+  const watchlistChips= document.getElementById("watchlist-chips");
+  const resRec        = document.getElementById("res-recommendation");
 
   // ------------------------------------------------------------------
   // Load watchlist chips
@@ -27,7 +27,7 @@
         chip.textContent = sym;
         chip.addEventListener("click", () => {
           symbolInput.value = sym;
-          runSmartScore(sym);
+          runAnalysis(sym);
         });
         watchlistChips.appendChild(chip);
       });
@@ -40,86 +40,113 @@
   analyzeBtn.addEventListener("click", () => {
     const sym = symbolInput.value.trim().toUpperCase();
     if (!sym) return showError("Please enter a symbol.");
-    runSmartScore(sym);
-  });
-
-  recommendBtn.addEventListener("click", () => {
-    const sym = symbolInput.value.trim().toUpperCase();
-    if (!sym) return showError("Please enter a symbol.");
-    runRecommendation(sym);
+    runAnalysis(sym);
   });
 
   symbolInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") analyzeBtn.click();
   });
 
+  recommendBtn.addEventListener("click", () => {
+    const sym = symbolInput.value.trim().toUpperCase();
+    if (!sym) return showError("Please enter a symbol.");
+    runAIRecommendation(sym);
+  });
+
   // ------------------------------------------------------------------
-  // Smart Score flow  (/api/score/<symbol>  — no OpenAI needed)
+  // Main analysis flow — calls /api/recommendation/<symbol>
+  // which returns BUY/SELL/HOLD + allocation + SL/TP + reasons
   // ------------------------------------------------------------------
-  function runSmartScore(symbol) {
+  function runAnalysis(symbol) {
     showLoading();
     hideError();
-    recommendationCard.classList.add("hidden");
+    resRec.classList.add("hidden");
+    resRec.textContent = "";
 
-    fetch(`/api/score/${encodeURIComponent(symbol)}`)
+    fetch(`/api/recommendation/${encodeURIComponent(symbol)}`)
       .then(checkStatus)
       .then((data) => {
-        renderScore(data);
+        renderSignal(data);
         showResults();
       })
       .catch((err) => {
-        showError(err.message || "Analysis failed.");
+        showError(err.message || "Analysis failed. Please try again.");
         hideLoading();
       });
   }
 
   // ------------------------------------------------------------------
-  // Recommendation flow  (/recommend/<symbol>  — needs OpenAI)
+  // AI deep-dive — calls /recommend/<symbol>
   // ------------------------------------------------------------------
-  function runRecommendation(symbol) {
-    showLoading();
+  function runAIRecommendation(symbol) {
+    recommendBtn.disabled = true;
+    recommendBtn.textContent = "⏳ Asking AI…";
     hideError();
-    recommendationCard.classList.add("hidden");
 
-    // First get smart score to populate cards, then get AI recommendation
-    fetch(`/api/score/${encodeURIComponent(symbol)}`)
+    fetch(`/recommend/${encodeURIComponent(symbol)}`)
       .then(checkStatus)
       .then((data) => {
-        renderScore(data);
-        showResults();
-        return fetch(`/recommend/${encodeURIComponent(symbol)}`);
-      })
-      .then(checkStatus)
-      .then((data) => {
-        document.getElementById("res-recommendation").textContent =
-          data.recommendation;
-        recommendationCard.classList.remove("hidden");
-        hideLoading();
+        resRec.textContent = data.recommendation;
+        resRec.classList.remove("hidden");
       })
       .catch((err) => {
-        showError(err.message || "Recommendation failed.");
-        hideLoading();
+        showError(err.message || "AI recommendation failed.");
+      })
+      .finally(() => {
+        recommendBtn.disabled = false;
+        recommendBtn.textContent = "Get AI Recommendation";
       });
   }
 
   // ------------------------------------------------------------------
-  // Render smart score data
+  // Render unified signal
   // ------------------------------------------------------------------
-  function renderScore(data) {
-    const pred = data.prediction;
-    const ind  = data.indicators;
+  function renderSignal(data) {
+    const action   = (data.action || "HOLD").toUpperCase();
+    const score    = data.score  || 0;
+    const price    = data.price  || 0;
+    const risk     = data.risk   || {};
+    const reasons  = data.reasons || [];
+    const ind      = data.indicators || {};
 
-    // Hero — symbol, price, timestamp
-    setText("res-symbol", data.symbol);
-    setText("res-price", formatPrice(data.price));
+    // ── Symbol & Price ──
+    setText("res-symbol", data.symbol || "—");
+    setText("res-price", formatPrice(price));
     const now = new Date();
-    setText("res-updated", `Last updated: ${now.toLocaleTimeString()}`);
+    setText("res-updated", `Updated: ${now.toLocaleTimeString()}`);
 
-    // Smart Score gauge
-    const score = data.smart_score;
+    // ── Action badge ──
+    const actionEl = document.getElementById("res-action");
+    actionEl.textContent = action;
+    actionEl.className   = "action-badge " + actionClass(action);
+
+    // Action sub-label
+    const subLabel = score >= 80 ? "Strong signal" : score >= 65 ? "Moderate signal" : "Weak / caution";
+    setText("res-action-sub", `Score: ${score}/100 · ${subLabel}`);
+
+    // ── Allocation ──
+    const allocUsd = risk.allocation_usd != null ? risk.allocation_usd : 0;
+    const allocPct = risk.allocation_pct != null ? risk.allocation_pct : 0;
+    setText("res-alloc-usd", action === "HOLD" ? "$0.00" : formatPrice(allocUsd));
+    setText("res-alloc-pct", action === "HOLD" ? "No position" : `${allocPct.toFixed(1)}% of balance`);
+
+    // ── Trade levels ──
+    const entry = risk.entry  != null ? risk.entry  : price;
+    const sl    = risk.stop_loss   != null ? risk.stop_loss   : 0;
+    const tp    = risk.take_profit != null ? risk.take_profit : 0;
+    const slPct = risk.stop_loss_pct   != null ? risk.stop_loss_pct   : 0;
+    const tpPct = risk.take_profit_pct != null ? risk.take_profit_pct : 0;
+
+    setText("res-entry", formatPrice(entry));
+    setText("res-sl", action === "HOLD" ? "—" : formatPrice(sl));
+    setText("res-sl-pct", action === "HOLD" ? "" : `-${slPct.toFixed(1)}%`);
+    setText("res-tp", action === "HOLD" ? "—" : formatPrice(tp));
+    setText("res-tp-pct", action === "HOLD" ? "" : `+${tpPct.toFixed(1)}%`);
+
+    // ── Score gauge ──
     const scoreEl = document.getElementById("res-score");
     scoreEl.textContent = score;
-    // Arc: full circumference ≈ 172.79 (for the half-circle path)
+    scoreEl.style.color = scoreColor(score);
     const arcLen = 172.79;
     const offset = arcLen - (score / 100) * arcLen;
     const arc = document.getElementById("gauge-arc");
@@ -127,95 +154,71 @@
       arc.setAttribute("stroke-dashoffset", offset.toFixed(2));
       arc.setAttribute("stroke", scoreColor(score));
     }
-    scoreEl.style.color = scoreColor(score);
 
-    // Action badge
-    const actionEl = document.getElementById("res-action");
-    const actionText = data.action || "HOLD 🟡";
-    actionEl.textContent = actionText;
-    actionEl.className = "action-badge " + actionClass(actionText);
+    // ── Score details ──
+    setText("res-confidence", `${(data.confidence || 0).toFixed(0)}%`);
 
-    // Signals list
-    const signalsEl = document.getElementById("res-signals");
-    signalsEl.innerHTML = "";
-    (data.signals || []).forEach((sig) => {
-      const div = document.createElement("div");
-      div.className = "signal-item";
-      div.textContent = sig;
-      signalsEl.appendChild(div);
-    });
+    const emaEl = document.getElementById("res-ema-trend");
+    const ema   = ind.ema_trend || "—";
+    emaEl.textContent = ema;
+    emaEl.className   = "score-stat-value " + (ema === "BULLISH" ? "bull" : ema === "BEARISH" ? "bear" : "neutral");
 
-    // Market / Prediction
-    const dirEl = document.getElementById("res-direction");
-    dirEl.textContent = pred.direction;
-    dirEl.className = `stat-value ${pred.direction === "LONG" ? "bull" : "bear"}`;
-    setText("res-confidence", `${pred.confidence}%`);
-    setText("res-accuracy", `${pred.cv_accuracy}%`);
+    const rsiEl = document.getElementById("res-rsi");
+    const rsi   = ind.rsi != null ? ind.rsi : "—";
+    rsiEl.textContent = rsi !== "—" ? rsi.toFixed(1) : "—";
+    if (rsi !== "—") {
+      rsiEl.className = "score-stat-value " + (rsi >= 70 ? "bear" : rsi <= 30 ? "bull" : "neutral");
+    }
 
-    // Indicators
-    colorRsi("res-rsi", ind.rsi);
-    setColored("res-macd", ind.macd, ind.macd >= 0 ? "bull" : "bear");
-    setText("res-adx", ind.adx);
-    setText("res-atr", ind.atr);
-    setColored(
-      "res-ema-trend",
-      ind.ema_trend,
-      ind.ema_trend === "BULLISH" ? "bull" : ind.ema_trend === "BEARISH" ? "bear" : "neutral"
-    );
+    const newsEl = document.getElementById("res-news-impact");
+    const ni     = data.news_impact || "—";
+    newsEl.textContent = ni;
+    newsEl.className   = "score-stat-value " + (ni === "HIGH" ? "bear" : ni === "MEDIUM" ? "neutral" : "bull");
 
-    // News
-    const impact = data.news_impact;
-    const impactEl = document.getElementById("res-impact");
-    impactEl.textContent = impact;
-    impactEl.className = `stat-value ${
-      impact === "HIGH" ? "bear" : impact === "MEDIUM" ? "neutral" : "bull"
-    }`;
-    setText("res-impact-score", Number(data.news_score).toFixed(2));
-    setText("res-articles", data.article_count != null ? data.article_count : "—");
-    setText("res-hi-events", data.high_impact_count != null ? data.high_impact_count : "—");
+    // ── Reasons ──
+    const reasonsList = document.getElementById("res-reasons");
+    reasonsList.innerHTML = "";
+    if (reasons.length === 0) {
+      const li = document.createElement("li");
+      li.textContent = "No specific signals triggered.";
+      reasonsList.appendChild(li);
+    } else {
+      reasons.forEach((r) => {
+        const li = document.createElement("li");
+        li.textContent = r;
+        reasonsList.appendChild(li);
+      });
+    }
   }
 
   // ------------------------------------------------------------------
   // Utilities
   // ------------------------------------------------------------------
   function formatPrice(price) {
-    return "$" + Number(price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const n = Number(price);
+    if (isNaN(n)) return "—";
+    if (n >= 100) return "$" + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return "$" + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   }
 
   function scoreColor(score) {
-    if (score >= 60) return "#3fb950";   // green
-    if (score >= 45) return "#d29922";   // yellow
-    return "#f85149";                    // red
+    if (score >= 65) return "#3fb950";
+    if (score >= 45) return "#d29922";
+    return "#f85149";
   }
 
   function actionClass(action) {
     const a = action.toLowerCase();
+    if (a === "buy")  return "buy";
+    if (a === "sell") return "sell";
     if (a.includes("strong buy"))  return "strong-buy";
-    if (a.includes("buy"))         return "buy";
     if (a.includes("strong sell")) return "strong-sell";
-    if (a.includes("sell"))        return "sell";
     return "hold";
   }
 
   function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
-  }
-
-  function setColored(id, value, cls) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = value;
-    el.className = `stat-value ${cls}`;
-  }
-
-  function colorRsi(id, value) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = value;
-    el.className = `stat-value ${
-      value >= 70 ? "bear" : value <= 30 ? "bull" : "neutral"
-    }`;
   }
 
   function checkStatus(response) {
@@ -248,3 +251,4 @@
     results.classList.remove("hidden");
   }
 })();
+

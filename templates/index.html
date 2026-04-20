@@ -3,154 +3,147 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Trading Bot Dashboard</title>
+  <title>AI Trading Bot</title>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
   <header>
     <div class="header-inner">
       <h1>🤖 AI Trading Bot</h1>
-      <p class="subtitle">Real‑time market analysis &amp; AI‑powered trade signals</p>
+      <p class="subtitle">Real‑time signals · BUY / SELL / HOLD · Risk‑managed</p>
     </div>
   </header>
 
   <main>
-    <!-- Search bar -->
+    <!-- Search -->
     <section class="search-section">
       <div class="search-box">
         <input
           id="symbol-input"
           type="text"
-          placeholder="Enter symbol (e.g. AAPL, BTC-USD, SPY)"
+          placeholder="Symbol — e.g. AAPL, BTC-USD, SPY"
           autocomplete="off"
         />
         <button id="analyze-btn">⚡ Analyze</button>
-        <button id="recommend-btn">🧠 AI Recommend</button>
       </div>
       <div id="error-msg" class="error-msg hidden"></div>
     </section>
 
-    <!-- Watchlist quick buttons -->
+    <!-- Watchlist chips -->
     <section class="watchlist-section">
-      <h2>Watchlist</h2>
       <div id="watchlist-chips" class="chip-row"></div>
     </section>
 
-    <!-- Loading spinner -->
+    <!-- Loading -->
     <div id="loading" class="hidden">
       <div class="spinner"></div>
       <p>Analyzing… this may take a moment</p>
     </div>
 
-    <!-- Results grid -->
-    <section id="results" class="results hidden">
+    <!-- ── Main result card ── -->
+    <section id="results" class="hidden">
 
-      <!-- Smart Score hero card -->
-      <div class="card full-width" id="score-card">
-        <div class="score-hero">
-          <div class="score-left">
-            <div class="score-symbol" id="res-symbol">—</div>
-            <div class="score-price" id="res-price">—</div>
-            <div class="score-updated" id="res-updated"></div>
+      <!-- Action hero -->
+      <div class="card action-card" id="action-card">
+        <div class="action-hero">
+          <div class="action-left">
+            <div class="sym-price-row">
+              <span class="res-symbol" id="res-symbol">—</span>
+              <span class="res-price" id="res-price">—</span>
+            </div>
+            <div class="res-updated" id="res-updated"></div>
           </div>
-          <div class="score-center">
-            <div class="score-gauge-wrap">
-              <svg class="score-gauge" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
-                <!-- background arc -->
-                <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#30363d" stroke-width="12" stroke-linecap="round"/>
-                <!-- colored arc filled by JS -->
-                <path id="gauge-arc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#d29922" stroke-width="12" stroke-linecap="round"
-                  stroke-dasharray="172.79" stroke-dashoffset="172.79"/>
-              </svg>
-              <div class="score-number-wrap">
-                <span class="score-number" id="res-score">—</span>
-                <span class="score-label-small">/100</span>
-              </div>
+          <div class="action-center">
+            <div class="action-badge" id="res-action">—</div>
+            <div class="action-sub" id="res-action-sub"></div>
+          </div>
+          <div class="action-right">
+            <div class="alloc-block">
+              <div class="alloc-label">Suggested amount</div>
+              <div class="alloc-usd" id="res-alloc-usd">—</div>
+              <div class="alloc-pct" id="res-alloc-pct">—</div>
             </div>
           </div>
-          <div class="score-right">
-            <div class="action-badge" id="res-action">—</div>
-            <div class="score-signals" id="res-signals"></div>
+        </div>
+      </div>
+
+      <!-- Trade levels -->
+      <div class="card levels-card">
+        <h3>📍 Trade Levels</h3>
+        <div class="levels-grid">
+          <div class="level-item">
+            <span class="level-label">Entry</span>
+            <span class="level-value" id="res-entry">—</span>
+          </div>
+          <div class="level-item sl">
+            <span class="level-label">Stop-Loss</span>
+            <span class="level-value" id="res-sl">—</span>
+            <span class="level-pct" id="res-sl-pct"></span>
+          </div>
+          <div class="level-item tp">
+            <span class="level-label">Take-Profit</span>
+            <span class="level-value" id="res-tp">—</span>
+            <span class="level-pct" id="res-tp-pct"></span>
           </div>
         </div>
       </div>
 
-      <!-- Market / indicators card -->
-      <div class="card" id="market-card">
-        <h3>📊 Market Analysis</h3>
-        <div class="stat-grid">
-          <div class="stat">
-            <span class="stat-label">Prediction</span>
-            <span class="stat-value" id="res-direction"></span>
+      <!-- Score & confidence -->
+      <div class="card score-card">
+        <h3>📊 Signal Strength</h3>
+        <div class="score-row">
+          <div class="score-gauge-wrap">
+            <svg class="score-gauge" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#30363d" stroke-width="12" stroke-linecap="round"/>
+              <path id="gauge-arc" d="M10,65 A55,55 0 0,1 110,65" fill="none" stroke="#d29922" stroke-width="12" stroke-linecap="round"
+                stroke-dasharray="172.79" stroke-dashoffset="172.79"/>
+            </svg>
+            <div class="score-num-wrap">
+              <span class="score-num" id="res-score">—</span>
+              <span class="score-denom">/100</span>
+            </div>
           </div>
-          <div class="stat">
-            <span class="stat-label">Confidence</span>
-            <span class="stat-value" id="res-confidence"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">CV Accuracy</span>
-            <span class="stat-value" id="res-accuracy"></span>
-          </div>
-        </div>
-
-        <h4>Technical Indicators</h4>
-        <div class="stat-grid">
-          <div class="stat">
-            <span class="stat-label">RSI</span>
-            <span class="stat-value" id="res-rsi"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">MACD</span>
-            <span class="stat-value" id="res-macd"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">ADX</span>
-            <span class="stat-value" id="res-adx"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">ATR</span>
-            <span class="stat-value" id="res-atr"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">EMA Trend</span>
-            <span class="stat-value" id="res-ema-trend"></span>
+          <div class="score-details">
+            <div class="score-stat">
+              <span class="score-stat-label">Confidence</span>
+              <span class="score-stat-value" id="res-confidence">—</span>
+            </div>
+            <div class="score-stat">
+              <span class="score-stat-label">EMA Trend</span>
+              <span class="score-stat-value" id="res-ema-trend">—</span>
+            </div>
+            <div class="score-stat">
+              <span class="score-stat-label">RSI</span>
+              <span class="score-stat-value" id="res-rsi">—</span>
+            </div>
+            <div class="score-stat">
+              <span class="score-stat-label">News Impact</span>
+              <span class="score-stat-value" id="res-news-impact">—</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- News card -->
-      <div class="card" id="news-card">
-        <h3>📰 News Sentiment</h3>
-        <div class="stat-grid">
-          <div class="stat">
-            <span class="stat-label">Overall Impact</span>
-            <span class="stat-value" id="res-impact"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Impact Score</span>
-            <span class="stat-value" id="res-impact-score"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Articles</span>
-            <span class="stat-value" id="res-articles"></span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">High‑Impact Events</span>
-            <span class="stat-value" id="res-hi-events"></span>
-          </div>
-        </div>
+      <!-- Reasons -->
+      <div class="card reasons-card">
+        <h3>💡 Why</h3>
+        <ul class="reasons-list" id="res-reasons"></ul>
       </div>
 
-      <!-- AI recommendation card -->
-      <div class="card full-width hidden" id="recommendation-card">
-        <h3>🧠 AI Trade Recommendation</h3>
-        <pre id="res-recommendation"></pre>
+      <!-- AI button / recommendation -->
+      <div class="card ai-card full-width">
+        <div class="ai-header">
+          <h3>🧠 AI Deep Analysis</h3>
+          <button id="recommend-btn" class="btn-ai">Get AI Recommendation</button>
+        </div>
+        <pre id="res-recommendation" class="hidden"></pre>
       </div>
+
     </section>
   </main>
 
   <footer>
-    <p>⚠️ This dashboard is for informational purposes only. Not financial advice.</p>
+    <p>⚠️ For informational purposes only. <strong>Not financial advice.</strong> Always do your own research before trading.</p>
   </footer>
 
   <script src="/static/js/app.js"></script>

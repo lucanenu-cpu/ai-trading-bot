@@ -1,8 +1,11 @@
+import logging
 import openai
 
 import config
 from market_analyzer import full_analysis
 from news_sentiment import analyze_news_impact
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are an elite Wall Street quantitative trading advisor managing a $10M portfolio. "
@@ -38,23 +41,68 @@ SYSTEM_PROMPT = (
     "⚠️ This is not financial advice. Trade responsibly."
 )
 
+# ---------------------------------------------------------------------------
+# In-memory AI call rate limiter (hourly bucket, no persistence)
+# ---------------------------------------------------------------------------
+import datetime
+from datetime import timezone
+from typing import Optional
+
+_ai_call_bucket: dict = {}   # { "YYYY-MM-DDTHH": count }
+
+
+def _ai_calls_remaining() -> int:
+    """Return number of remaining AI calls for the current UTC hour."""
+    hour_key = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+    used = _ai_call_bucket.get(hour_key, 0)
+    return max(0, config.MAX_AI_CALLS_PER_HOUR - used)
+
+
+def _record_ai_call() -> None:
+    """Increment the call counter for the current UTC hour."""
+    hour_key = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+    _ai_call_bucket[hour_key] = _ai_call_bucket.get(hour_key, 0) + 1
+    # Prune old keys to avoid unbounded growth
+    current = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+    stale = [k for k in _ai_call_bucket if k < current]
+    for k in stale:
+        del _ai_call_bucket[k]
+
+
+def ai_call_allowed() -> bool:
+    """Return True if we are allowed to call OpenAI right now."""
+    if not config.AI_ENABLED:
+        logger.info("AI disabled via AI_ENABLED=false")
+        return False
+    if not config.OPENAI_API_KEY:
+        logger.warning("OpenAI API key not set — skipping AI call")
+        return False
+    remaining = _ai_calls_remaining()
+    if remaining <= 0:
+        logger.warning(
+            "AI call budget exhausted for current hour (limit=%d). Falling back to local scoring.",
+            config.MAX_AI_CALLS_PER_HOUR,
+        )
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Legacy function (kept for backward compatibility with server.py)
+# ---------------------------------------------------------------------------
 
 def get_trade_recommendation(symbol: str) -> str:
     """
-    Run full technical + news analysis, then ask GPT‑4o for a trade recommendation.
+    Run full technical + news analysis, then ask GPT for a trade recommendation.
 
-    Returns the raw GPT response string.
+    Returns the raw GPT response string (or a fallback message when AI is unavailable).
     """
-    client = openai.OpenAI(api_key=config.OPENAI_API_KEY)
-
-    # --- gather data ---
     market_data = full_analysis(symbol)
     news_data = analyze_news_impact(symbol)
 
     pred = market_data["prediction"]
     ind = market_data["indicators"]
 
-    # Build a concise summary of high‑impact news
     hi_events = news_data.get("high_impact_events", [])
     news_summary_lines = []
     for ev in hi_events[:3]:
@@ -64,7 +112,17 @@ def get_trade_recommendation(symbol: str) -> str:
             f"[{da.get('impact_direction', 'N/A')}, "
             f"expected: {da.get('expected_move', 'N/A')}]"
         )
-    news_summary = "\n".join(news_summary_lines) if news_summary_lines else "  - No high‑impact events detected."
+    news_summary = "\n".join(news_summary_lines) if news_summary_lines else "  - No high-impact events detected."
+
+    if not ai_call_allowed():
+        logger.info("get_trade_recommendation: AI unavailable, returning local fallback for %s", symbol)
+        score_data = get_smart_score(symbol)
+        return (
+            f"[Local analysis — AI budget exhausted or disabled]\n"
+            f"Action: {score_data['action']}\n"
+            f"Score: {score_data['smart_score']}/100\n"
+            f"Signals:\n" + "\n".join(f"  {s}" for s in score_data['signals'])
+        )
 
     prompt = (
         f"Symbol: {symbol}\n"
@@ -83,42 +141,64 @@ def get_trade_recommendation(symbol: str) -> str:
         f"Overall Impact: {news_data['overall_impact']}\n"
         f"Impact Score: {news_data['impact_score']}\n"
         f"Articles Analyzed: {news_data['article_count']}\n"
-        f"High‑Impact Events:\n{news_summary}\n\n"
+        f"High-Impact Events:\n{news_summary}\n\n"
         "Based on the above data, provide your trade recommendation."
     )
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.3,
-        max_tokens=700,
-    )
+    try:
+        client = openai.OpenAI(api_key=config.OPENAI_API_KEY)
+        _record_ai_call()
+        logger.info("AI call: get_trade_recommendation for %s (remaining_this_hour=%d)", symbol, _ai_calls_remaining())
+        response = client.chat.completions.create(
+            model=config.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=700,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as exc:
+        logger.error("OpenAI call failed for %s: %s", symbol, exc)
+        return f"[AI unavailable: {exc}]"
 
-    return response.choices[0].message.content.strip()
 
+# ---------------------------------------------------------------------------
+# Smart score (no OpenAI)
+# ---------------------------------------------------------------------------
 
 def get_smart_score(symbol: str) -> dict:
     """Generate a smart score 0-100 based on all available signals, no OpenAI needed."""
+    logger.info("SmartScore: starting analysis for %s", symbol)
     market_data = full_analysis(symbol)
     news_data = analyze_news_impact(symbol)
 
     pred = market_data["prediction"]
     ind = market_data["indicators"]
 
-    score = 50  # neutral start
+    score = 50.0  # neutral start
     signals = []
+    score_breakdown = {
+        "base": 50.0,
+        "ml_delta": 0.0,
+        "rsi_delta": 0.0,
+        "ema_delta": 0.0,
+        "adx_delta": 0.0,
+        "news_delta": 0.0,
+    }
 
     # ML model signal (up to ±20)
     confidence = pred.get("confidence", 50)
+    ml_delta = (confidence - 50) * 0.4
     if pred["direction"] == "LONG":
-        score += (confidence - 50) * 0.4
+        score += ml_delta
+        score_breakdown["ml_delta"] = round(ml_delta, 2)
         if confidence > 70:
             signals.append(f"🤖 ML model: LONG with {confidence:.0f}% confidence")
     else:
-        score -= (confidence - 50) * 0.4
+        score -= ml_delta
+        score_breakdown["ml_delta"] = round(-ml_delta, 2)
         if confidence > 70:
             signals.append(f"🤖 ML model: SHORT with {confidence:.0f}% confidence")
 
@@ -126,39 +206,53 @@ def get_smart_score(symbol: str) -> dict:
     rsi = ind.get("rsi", 50)
     if rsi < 30:
         score += 10
+        score_breakdown["rsi_delta"] = 10
         signals.append(f"📉 RSI oversold ({rsi:.0f}) — potential bounce")
     elif rsi > 70:
         score -= 10
+        score_breakdown["rsi_delta"] = -10
         signals.append(f"📈 RSI overbought ({rsi:.0f}) — potential pullback")
 
     # EMA trend (up to ±10)
     if ind.get("ema_trend") == "BULLISH":
         score += 10
+        score_breakdown["ema_delta"] = 10
         signals.append("📊 EMA alignment: BULLISH (9 > 21 > 50)")
     elif ind.get("ema_trend") == "BEARISH":
         score -= 10
+        score_breakdown["ema_delta"] = -10
         signals.append("📊 EMA alignment: BEARISH (9 < 21 < 50)")
 
     # ADX trend strength (up to ±5)
     adx = ind.get("adx", 20)
     if adx > 25:
-        score += 5 if pred["direction"] == "LONG" else -5
+        adx_delta = 5 if pred["direction"] == "LONG" else -5
+        score += adx_delta
+        score_breakdown["adx_delta"] = adx_delta
         signals.append(f"💪 Strong trend (ADX={adx:.0f})")
 
     # News impact (up to ±15)
     impact = news_data.get("overall_impact", "LOW")
     impact_score_val = news_data.get("impact_score", 0)
     if impact == "HIGH":
-        score += 15 if impact_score_val >= 0.5 else -15
+        news_delta = 15 if impact_score_val >= 0.5 else -15
+        score += news_delta
+        score_breakdown["news_delta"] = news_delta
         signals.append(f"📰 HIGH impact news detected (score: {impact_score_val:.2f})")
     elif impact == "MEDIUM":
         score += 5
+        score_breakdown["news_delta"] = 5
         signals.append(f"📰 MEDIUM impact news")
 
     # Clamp 0-100
-    score = max(0, min(100, score))
+    score = max(0.0, min(100.0, score))
 
-    # Generate recommendation
+    logger.info(
+        "SmartScore: %s score=%.1f breakdown=%s",
+        symbol, score, score_breakdown,
+    )
+
+    # Generate recommendation label
     if score >= 75:
         action = "STRONG BUY 🟢"
     elif score >= 60:
@@ -176,6 +270,7 @@ def get_smart_score(symbol: str) -> dict:
         "smart_score": round(score),
         "action": action,
         "signals": signals,
+        "score_breakdown": score_breakdown,
         "prediction": pred,
         "indicators": ind,
         "news_impact": impact,
@@ -183,3 +278,149 @@ def get_smart_score(symbol: str) -> dict:
         "article_count": news_data.get("article_count", 0),
         "high_impact_count": len(news_data.get("high_impact_events", [])),
     }
+
+
+# ---------------------------------------------------------------------------
+# Unified actionable recommendation
+# ---------------------------------------------------------------------------
+
+def get_actionable_signal(symbol: str) -> dict:
+    """
+    Produce a single structured trading signal with BUY/SELL/HOLD action,
+    allocation recommendation, SL/TP levels, and reasons.
+
+    Returns:
+        {
+            "symbol":         str,
+            "price":          float,
+            "action":         "BUY" | "SELL" | "HOLD",
+            "confidence":     float (0-100),
+            "score":          float (0-100),
+            "score_breakdown": dict,
+            "reasons":        list[str],
+            "risk": {
+                "entry":          float,
+                "stop_loss":      float,
+                "take_profit":    float,
+                "stop_loss_pct":  float,
+                "take_profit_pct":float,
+                "allocation_usd": float,
+                "allocation_pct": float,
+                "quantity":       float,
+            },
+            "ai_used":        bool,
+            "ai_calls_remaining": int,
+        }
+    """
+    from risk_manager import (
+        calculate_position_size,
+        compute_trade_levels,
+        allocation_recommendation,
+        can_open_new_trade,
+    )
+
+    logger.info("ActionableSignal: generating for %s", symbol)
+
+    # --- Base scoring ---
+    score_data = get_smart_score(symbol)
+    score = float(score_data["smart_score"])
+    price = score_data["price"]
+    pred_direction = score_data["prediction"]["direction"]
+    reasons = list(score_data["signals"])
+
+    # --- Determine raw action from score + ML direction ---
+    # For BUY: bullish score must exceed MIN_SIGNAL_SCORE
+    # For SELL: bearish conviction = (100 - score) must exceed MIN_SIGNAL_SCORE
+    bearish_score = 100.0 - score
+
+    if pred_direction == "LONG" and score >= config.MIN_SIGNAL_SCORE:
+        raw_action = "BUY"
+    elif pred_direction == "SHORT" and bearish_score >= config.MIN_SIGNAL_SCORE:
+        raw_action = "SELL"
+    else:
+        raw_action = "HOLD"
+        if pred_direction == "LONG":
+            reasons.insert(0, f"Score {score:.0f} below threshold {config.MIN_SIGNAL_SCORE:.0f}")
+        else:
+            reasons.insert(0, f"Bearish score {bearish_score:.0f} below threshold {config.MIN_SIGNAL_SCORE:.0f}")
+
+    # --- AI refinement only for near-threshold or strong setups ---
+    ai_used = False
+    ai_reasoning: list[str] = []
+    effective_score = score if pred_direction == "LONG" else bearish_score
+    near_threshold = (
+        abs(effective_score - config.MIN_SIGNAL_SCORE) <= 10
+        or effective_score >= config.STRONG_SIGNAL_SCORE
+    )
+
+    if near_threshold and raw_action != "HOLD" and ai_call_allowed():
+        try:
+            rec_text = get_trade_recommendation(symbol)
+            ai_used = True
+            # Extract first 2 bullets from AI response as extra reasons
+            for line in rec_text.splitlines():
+                stripped = line.strip().lstrip("•- ")
+                if stripped and not stripped.startswith("━") and len(ai_reasoning) < 2:
+                    ai_reasoning.append(f"🧠 {stripped[:120]}")
+            if ai_reasoning:
+                reasons.extend(ai_reasoning)
+        except Exception as exc:
+            logger.warning("AI refinement failed for %s: %s", symbol, exc)
+
+    # --- Risk gate check ---
+    can_trade, gate_reason = can_open_new_trade()
+    if not can_trade and raw_action != "HOLD":
+        logger.info("ActionableSignal: risk gate blocked %s — %s", symbol, gate_reason)
+        raw_action = "HOLD"
+        reasons.insert(0, f"Risk gate: {gate_reason}")
+
+    action = raw_action
+
+    # --- SL/TP levels ---
+    levels = compute_trade_levels(
+        price=price,
+        direction=action if action != "HOLD" else "BUY",
+        stop_loss_pct=config.DEFAULT_STOP_LOSS_PCT,
+        take_profit_pct=config.DEFAULT_TAKE_PROFIT_PCT,
+    )
+
+    # --- Allocation sizing (use effective score for sizing decisions) ---
+    alloc = allocation_recommendation(effective_score)
+    sizing = calculate_position_size(
+        balance=config.ACCOUNT_BALANCE_USD,
+        risk_pct=config.RISK_PER_TRADE_PCT,
+        stop_loss_pct=config.DEFAULT_STOP_LOSS_PCT,
+        price=price,
+    )
+
+    risk_obj = {
+        "entry": levels["entry"],
+        "stop_loss": levels["stop_loss"],
+        "take_profit": levels["take_profit"],
+        "stop_loss_pct": levels["stop_loss_pct"],
+        "take_profit_pct": levels["take_profit_pct"],
+        "allocation_usd": alloc["suggested_usd"],
+        "allocation_pct": alloc["suggested_pct"],
+        "quantity": sizing["quantity"],
+    }
+
+    logger.info(
+        "ActionableSignal: %s action=%s score=%.1f ai_used=%s",
+        symbol, action, score, ai_used,
+    )
+
+    return {
+        "symbol": symbol,
+        "price": price,
+        "action": action,
+        "confidence": score_data["prediction"].get("confidence", 0),
+        "score": score,
+        "score_breakdown": score_data.get("score_breakdown", {}),
+        "reasons": reasons[:6],  # cap to keep messages concise
+        "risk": risk_obj,
+        "ai_used": ai_used,
+        "ai_calls_remaining": _ai_calls_remaining(),
+        "news_impact": score_data.get("news_impact", "LOW"),
+        "indicators": score_data.get("indicators", {}),
+    }
+

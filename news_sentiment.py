@@ -141,14 +141,28 @@ def _finbert_sentiment(text: str) -> dict:
 # ---------------------------------------------------------------------------
 def gpt_deep_analysis(article: dict, symbol: str) -> dict:
     """
-    Ask GPT-4o for a structured JSON analysis of a news article.
+    Ask GPT for a structured JSON analysis of a news article.
 
-    Returns dict with keys:
-        event_summary, affected_assets, impact_direction, impact_magnitude,
-        expected_move, time_horizon, key_risk, recommended_action
+    Respects AI_ENABLED flag and hourly call budget.
+    Returns a fallback dict if AI is unavailable.
     """
     import json
     import openai
+    from ai_advisor import ai_call_allowed, _record_ai_call
+
+    fallback = {
+        "event_summary": article.get("title", ""),
+        "affected_assets": [symbol],
+        "impact_direction": "NEUTRAL",
+        "impact_magnitude": "LOW",
+        "expected_move": "0%",
+        "time_horizon": "INTRADAY",
+        "key_risk": "AI unavailable",
+        "recommended_action": "WATCH",
+    }
+
+    if not ai_call_allowed():
+        return fallback
 
     client = openai.OpenAI(api_key=config.OPENAI_API_KEY)
 
@@ -169,8 +183,9 @@ def gpt_deep_analysis(article: dict, symbol: str) -> dict:
     )
 
     try:
+        _record_ai_call()
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=config.OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": "You are a professional financial analyst."},
                 {"role": "user", "content": prompt},
