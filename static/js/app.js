@@ -179,16 +179,35 @@
   function renderSignal(data) {
     const action   = (data.action || "HOLD").toUpperCase();
     const score    = data.score  || 0;
-    const price    = data.price  || 0;
     const risk     = data.risk   || {};
     const reasons  = data.reasons || [];
     const ind      = data.indicators || {};
+    const resolved = data.resolved || {};
+    const tv       = data.tradingview || {};
+
+    // Prefer TradingView's close price when available so the number shown matches
+    // exactly what the embedded TradingView chart displays. Fall back to the
+    // yfinance-based price from the scoring pipeline otherwise.
+    const price = (tv && typeof tv.close === "number" && tv.close > 0)
+      ? tv.close
+      : (data.price || 0);
 
     // ── Symbol & Price ──
-    setText("res-symbol", data.symbol || "—");
+    const displaySymbol = resolved.symbol || data.symbol || "—";
+    setText("res-symbol", displaySymbol);
     setText("res-price", formatPrice(price));
     const now = new Date();
     setText("res-updated", `Updated: ${now.toLocaleTimeString()}`);
+
+    // Exchange / description line (e.g. "NASDAQ · Apple Inc. · stock")
+    const exchangeEl = document.getElementById("res-exchange");
+    if (exchangeEl) {
+      const parts = [];
+      if (resolved.exchange) parts.push(resolved.exchange);
+      if (resolved.description) parts.push(resolved.description);
+      if (resolved.type) parts.push(resolved.type);
+      exchangeEl.textContent = parts.join(" · ");
+    }
 
     // ── Action badge ──
     const actionEl = document.getElementById("res-action");
@@ -197,6 +216,20 @@
 
     const subLabel = score >= 80 ? "Strong signal" : score >= 65 ? "Moderate signal" : "Weak / caution";
     setText("res-action-sub", `Score: ${score}/100 · ${subLabel}`);
+
+    // TradingView consensus badge (under the action badge)
+    const consEl = document.getElementById("res-tv-consensus");
+    if (consEl) {
+      if (tv && tv.recommendation && tv.recommendation !== "UNKNOWN") {
+        const tvLabel = String(tv.recommendation).replace("_", " ");
+        const tvScore = typeof tv.score === "number" ? tv.score : 0;
+        consEl.textContent = `📡 TradingView: ${tvLabel} (${tvScore >= 0 ? "+" : ""}${tvScore.toFixed(2)})`;
+        consEl.className = "tv-consensus " + tvConsensusClass(tv.recommendation);
+      } else {
+        consEl.textContent = "";
+        consEl.className = "tv-consensus";
+      }
+    }
 
     // ── Allocation ──
     const allocUsd = risk.allocation_usd != null ? risk.allocation_usd : 0;
@@ -264,8 +297,87 @@
       });
     }
 
+    // ── Embedded TradingView chart ──
+    renderTradingViewChart(resolved, data.symbol);
+
     // Update header status after a signal load
     refreshHeaderStatus();
+  }
+
+  // ------------------------------------------------------------------
+  // Embed the TradingView Advanced Chart widget.
+  // Builds "EXCHANGE:SYMBOL" when we have one (from resolved), otherwise
+  // falls back to the raw ticker — TradingView will auto-resolve.
+  // ------------------------------------------------------------------
+  function renderTradingViewChart(resolved, rawSymbol) {
+    const container = document.getElementById("tv-chart-container");
+    if (!container) return;
+
+    const sym = (resolved && resolved.symbol) ? resolved.symbol : (rawSymbol || "").toUpperCase();
+    const exch = resolved && resolved.exchange ? resolved.exchange.toUpperCase() : "";
+    const type = resolved && resolved.type ? resolved.type : "";
+
+    if (!sym) {
+      container.innerHTML = '<div class="chart-empty">No chart available.</div>';
+      return;
+    }
+
+    // Build the TradingView ticker: prefer EXCHANGE:SYMBOL when we know the
+    // exchange; for crypto fall back to a sensible default.
+    let tvSymbol;
+    if (exch) {
+      tvSymbol = `${exch}:${sym}`;
+    } else if (type === "crypto") {
+      // Strip any hyphen and assume Binance (very common; TV will fall back
+      // gracefully if Binance doesn't list it).
+      tvSymbol = `BINANCE:${sym.replace(/-/g, "")}`;
+    } else {
+      tvSymbol = sym;
+    }
+
+    // Recreate container to fully reset any previous widget.
+    container.innerHTML = "";
+    const widgetDiv = document.createElement("div");
+    widgetDiv.className = "tradingview-widget-container__widget";
+    widgetDiv.style.height = "100%";
+    widgetDiv.style.width = "100%";
+    container.appendChild(widgetDiv);
+
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.async = true;
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.innerHTML = JSON.stringify({
+      autosize: true,
+      symbol: tvSymbol,
+      interval: "60",
+      timezone: "Etc/UTC",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      toolbar_bg: "#0d1117",
+      enable_publishing: false,
+      allow_symbol_change: true,
+      hide_side_toolbar: false,
+      withdateranges: true,
+      studies: [
+        "STD;EMA%Cross",
+        "STD;RSI",
+        "STD;MACD",
+      ],
+      support_host: "https://www.tradingview.com",
+    });
+    container.appendChild(script);
+  }
+
+  function tvConsensusClass(rec) {
+    switch ((rec || "").toUpperCase()) {
+      case "STRONG_BUY":  return "cons-strong-buy";
+      case "BUY":         return "cons-buy";
+      case "STRONG_SELL": return "cons-strong-sell";
+      case "SELL":        return "cons-sell";
+      default:            return "cons-neutral";
+    }
   }
 
   // ------------------------------------------------------------------
