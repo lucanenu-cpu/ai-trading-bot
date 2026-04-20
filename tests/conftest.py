@@ -32,6 +32,15 @@ sys.modules["sklearn.model_selection"].TimeSeriesSplit = MagicMock()
 sys.modules["xgboost"].XGBClassifier = MagicMock()
 sys.modules["numpy"].bool_ = bool
 
+# Ensure new config attrs are present so tests that import config early don't fail
+import config as _config
+if not hasattr(_config, "TRADE_COOLDOWN_SECS"):
+    _config.TRADE_COOLDOWN_SECS = 0
+if not hasattr(_config, "CHOP_ADX_THRESHOLD"):
+    _config.CHOP_ADX_THRESHOLD = 20.0
+if not hasattr(_config, "ATR_SL_MULTIPLIER"):
+    _config.ATR_SL_MULTIPLIER = 0.0
+
 # Stub market_analyzer and news_sentiment so ai_advisor can be imported
 # without triggering the heavy chain.  Tests that need controlled output
 # patch ai_advisor.full_analysis / ai_advisor.analyze_news_impact directly.

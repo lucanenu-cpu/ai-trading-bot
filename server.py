@@ -170,6 +170,123 @@ def api_risk_state():
     })
 
 
+@app.route("/api/bot-status")
+def api_bot_status():
+    """
+    Comprehensive bot status endpoint for the dashboard.
+
+    Returns risk state, open positions, recent trade history, config limits,
+    and AI availability — all in one call.
+    """
+    import risk_manager
+    from ai_advisor import _ai_calls_remaining
+    from scheduler import WATCHLIST
+
+    state = risk_manager.get_state()
+    risk_manager.reset_daily_if_needed(state)
+
+    return jsonify({
+        "success": True,
+        "status": "running",
+        "ai_enabled": config.AI_ENABLED,
+        "ai_calls_remaining": _ai_calls_remaining(),
+        "ai_calls_max": config.MAX_AI_CALLS_PER_HOUR,
+        "trades_today": state.trades_today,
+        "open_positions": state.open_positions,
+        "realized_pnl_today": state.realized_pnl_today,
+        "recent_trades": state.recent_trades[-10:],
+        "watchlist": WATCHLIST,
+        "limits": {
+            "max_trades_per_day": config.MAX_TRADES_PER_DAY,
+            "max_open_positions": config.MAX_OPEN_POSITIONS,
+            "max_daily_loss_pct": config.MAX_DAILY_LOSS_PCT,
+            "account_balance_usd": config.ACCOUNT_BALANCE_USD,
+            "risk_per_trade_pct": config.RISK_PER_TRADE_PCT,
+            "min_signal_score": config.MIN_SIGNAL_SCORE,
+            "strong_signal_score": config.STRONG_SIGNAL_SCORE,
+            "default_stop_loss_pct": config.DEFAULT_STOP_LOSS_PCT,
+            "default_take_profit_pct": config.DEFAULT_TAKE_PROFIT_PCT,
+            "trade_cooldown_secs": config.TRADE_COOLDOWN_SECS,
+            "chop_adx_threshold": config.CHOP_ADX_THRESHOLD,
+            "atr_sl_multiplier": config.ATR_SL_MULTIPLIER,
+            "max_ai_calls_per_hour": config.MAX_AI_CALLS_PER_HOUR,
+        },
+    })
+
+
+@app.route("/api/settings", methods=["POST"])
+def api_settings():
+    """
+    Update key risk/strategy settings in-memory (no restart needed).
+
+    Accepts a JSON body with any subset of the following fields (all optional):
+        account_balance_usd  (float, 1 – 1 000 000)
+        risk_per_trade_pct   (float, 0.1 – 5.0)
+        default_stop_loss_pct  (float, 0.5 – 10.0)
+        default_take_profit_pct (float, 1.0 – 20.0)
+        min_signal_score     (float, 50 – 90)
+        trade_cooldown_secs  (int, 0 – 3600)
+        chop_adx_threshold   (float, 0 – 40)
+        atr_sl_multiplier    (float, 0 – 5)
+
+    Returns the updated effective config values.
+    """
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({"success": False, "error": "Empty JSON body"}), 400
+
+    updated = {}
+    errors = []
+
+    def _update_float(key: str, attr: str, lo: float, hi: float) -> None:
+        raw = body.get(key)
+        if raw is None:
+            return
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            errors.append(f"{key}: must be a number")
+            return
+        if not (lo <= v <= hi):
+            errors.append(f"{key}: must be between {lo} and {hi}")
+            return
+        setattr(config, attr, v)
+        updated[key] = v
+
+    def _update_int(key: str, attr: str, lo: int, hi: int) -> None:
+        raw = body.get(key)
+        if raw is None:
+            return
+        try:
+            v = int(raw)
+        except (TypeError, ValueError):
+            errors.append(f"{key}: must be an integer")
+            return
+        if not (lo <= v <= hi):
+            errors.append(f"{key}: must be between {lo} and {hi}")
+            return
+        setattr(config, attr, v)
+        updated[key] = v
+
+    _update_float("account_balance_usd",     "ACCOUNT_BALANCE_USD",      1.0,   1_000_000.0)
+    _update_float("risk_per_trade_pct",       "RISK_PER_TRADE_PCT",       0.1,   5.0)
+    _update_float("default_stop_loss_pct",    "DEFAULT_STOP_LOSS_PCT",    0.5,   10.0)
+    _update_float("default_take_profit_pct",  "DEFAULT_TAKE_PROFIT_PCT",  1.0,   20.0)
+    _update_float("min_signal_score",         "MIN_SIGNAL_SCORE",         50.0,  90.0)
+    _update_float("chop_adx_threshold",       "CHOP_ADX_THRESHOLD",       0.0,   40.0)
+    _update_float("atr_sl_multiplier",        "ATR_SL_MULTIPLIER",        0.0,   5.0)
+    _update_int(  "trade_cooldown_secs",      "TRADE_COOLDOWN_SECS",      0,     3600)
+
+    if errors:
+        return jsonify({"success": False, "errors": errors}), 400
+
+    if not updated:
+        return jsonify({"success": False, "error": "No recognised settings provided"}), 400
+
+    logger.info("Settings updated via API: %s", updated)
+    return jsonify({"success": True, "updated": updated})
+
+
 @app.route("/news/<symbol>")
 def news(symbol: str):
     """Return the latest news and sentiment for a symbol."""
