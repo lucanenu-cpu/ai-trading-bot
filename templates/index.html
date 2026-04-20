@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Trading Bot</title>
   <link rel="stylesheet" href="/static/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
 </head>
 <body>
   <!-- ═══ HEADER ═══ -->
@@ -103,13 +104,19 @@
           </div>
         </div>
 
-        <!-- TradingView chart -->
+        <!-- Price chart (Chart.js primary + TradingView secondary) -->
         <div class="card chart-card full-width">
           <div class="chart-header">
-            <h3>📈 TradingView Chart</h3>
-            <span class="chart-note" id="chart-note">Live chart — data matches the numbers shown above.</span>
+            <h3>📈 Price Chart</h3>
+            <span class="chart-note" id="chart-note">Last 30 trading days · entry / SL / TP levels marked</span>
           </div>
-          <div class="tv-chart-wrap">
+          <!-- Chart.js canvas — primary, always works -->
+          <div class="chartjs-wrap">
+            <canvas id="price-chart"></canvas>
+            <div id="chart-empty" class="chart-empty hidden">Chart data unavailable for this symbol.</div>
+          </div>
+          <!-- TradingView widget — secondary, requires internet -->
+          <div class="tv-chart-wrap tv-chart-secondary">
             <div id="tv-chart-container" class="tv-chart-container"></div>
           </div>
         </div>

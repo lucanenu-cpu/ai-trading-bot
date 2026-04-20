@@ -617,6 +617,22 @@ footer strong { color: var(--yellow); }
 }
 
 /* ══════════════════════════════════════════
+   CHART.JS PRIMARY CHART
+   ══════════════════════════════════════════ */
+.chartjs-wrap {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  margin-bottom: 1rem;
+}
+.chartjs-wrap canvas {
+  display: block;
+}
+.tv-chart-secondary {
+  height: 400px;
+}
+
+/* ══════════════════════════════════════════
    TRADINGVIEW CHART CARD
    ══════════════════════════════════════════ */
 .chart-card {
