@@ -110,6 +110,38 @@ def api_recommendation(symbol: str):
         return jsonify({"success": False, "error": "Signal generation failed. Please try again."}), 500
 
 
+@app.route("/api/ask", methods=["GET", "POST"])
+def api_ask():
+    """
+    Natural-language auto-analysis endpoint.
+
+    Accepts a free-text query (e.g. "should I invest in Tesla?", "bitcoin",
+    "apple stock"), auto-searches TradingView to resolve the ticker, then
+    returns a unified BUY/SELL/HOLD signal with recommended allocation
+    (how much to invest), SL/TP levels, reasons, and TradingView's
+    technical consensus.
+
+    Query parameter (GET) or JSON body field (POST): ``q`` / ``query``.
+    """
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        query = (body.get("q") or body.get("query") or "").strip()
+    else:
+        query = (request.args.get("q") or request.args.get("query") or "").strip()
+
+    if not query:
+        return jsonify({"success": False, "error": "Missing 'q' query parameter."}), 400
+
+    try:
+        from ai_advisor import get_auto_analysis
+        result = get_auto_analysis(query)
+        status = 200 if result.get("success", False) else 404
+        return jsonify(result), status
+    except Exception as exc:
+        logger.exception("Error in auto-analysis for query %r", query)
+        return jsonify({"success": False, "error": "Auto-analysis failed. Please try again."}), 500
+
+
 @app.route("/api/risk-state")
 def api_risk_state():
     """Return current risk state for diagnostics."""

@@ -425,3 +425,110 @@ def get_actionable_signal(symbol: str) -> dict:
         "indicators": score_data.get("indicators", {}),
     }
 
+
+# ---------------------------------------------------------------------------
+# Auto-analysis from a natural-language query (TradingView-backed)
+# ---------------------------------------------------------------------------
+
+def get_auto_analysis(query: str) -> dict:
+    """
+    Resolve a free-text user query (e.g. "should I invest in Tesla?", "bitcoin",
+    "apple stock") to a concrete ticker via TradingView's public symbol-search,
+    then run the standard actionable-signal pipeline on it.
+
+    TradingView's built-in technical consensus is folded into the result as an
+    extra reason and is also used to nudge near-threshold HOLD decisions when
+    the consensus is strong in one direction.
+
+    Returns a dict with the same shape as :func:`get_actionable_signal` plus::
+
+        {
+            "query":       "<original user query>",
+            "resolved": {
+                "symbol":      "AAPL",
+                "exchange":    "NASDAQ",
+                "type":        "stock",
+                "description": "Apple Inc.",
+            },
+            "tradingview": {
+                "recommendation": "BUY",
+                "score":          0.33,
+                ...
+            },
+        }
+
+    When no symbol can be resolved, returns::
+
+        {"success": False, "error": "...", "query": "..."}
+    """
+    from tradingview import (
+        search_symbol,
+        get_technical_analysis,
+        to_yfinance_symbol,
+    )
+
+    if not query or not query.strip():
+        return {"success": False, "error": "Empty query.", "query": query or ""}
+
+    logger.info("AutoAnalysis: resolving query %r via TradingView", query)
+    match = search_symbol(query)
+    if not match:
+        return {
+            "success": False,
+            "error": (
+                "Could not find a matching ticker on TradingView. "
+                "Try a more specific name or a ticker symbol."
+            ),
+            "query": query,
+        }
+
+    tv_symbol = match["symbol"]
+    tv_type = match.get("type", "stock")
+    yf_symbol = to_yfinance_symbol(tv_symbol, tv_type)
+
+    logger.info(
+        "AutoAnalysis: %r resolved to %s (%s, %s) → yfinance=%s",
+        query, tv_symbol, match.get("exchange"), tv_type, yf_symbol,
+    )
+
+    # --- Run the main signal pipeline on the resolved symbol ---
+    signal = get_actionable_signal(yf_symbol)
+
+    # --- Pull TradingView's technical consensus in parallel-ish ---
+    tv_analysis = get_technical_analysis(tv_symbol, match.get("exchange", ""), tv_type)
+
+    # Fold TV consensus into the reasons list.
+    rec = tv_analysis.get("recommendation", "UNKNOWN")
+    if rec != "UNKNOWN":
+        reasons = list(signal.get("reasons", []))
+        reasons.append(
+            f"📡 TradingView consensus: {rec} (score {tv_analysis.get('score', 0):+.2f})"
+        )
+        signal["reasons"] = reasons[:7]
+
+        # Nudge near-threshold HOLD → BUY/SELL when TV is STRONG and consistent.
+        if signal.get("action") == "HOLD":
+            score = float(signal.get("score", 50.0))
+            if rec == "STRONG_BUY" and score >= (config.MIN_SIGNAL_SCORE - 10):
+                signal["action"] = "BUY"
+                signal["reasons"].insert(
+                    0, "TradingView STRONG_BUY consensus tipped near-threshold HOLD to BUY."
+                )
+            elif rec == "STRONG_SELL" and (100.0 - score) >= (config.MIN_SIGNAL_SCORE - 10):
+                signal["action"] = "SELL"
+                signal["reasons"].insert(
+                    0, "TradingView STRONG_SELL consensus tipped near-threshold HOLD to SELL."
+                )
+
+    signal["success"] = True
+    signal["query"] = query
+    signal["resolved"] = {
+        "symbol": tv_symbol,
+        "yfinance_symbol": yf_symbol,
+        "exchange": match.get("exchange", ""),
+        "type": tv_type,
+        "description": match.get("description", ""),
+    }
+    signal["tradingview"] = tv_analysis
+    return signal
+
