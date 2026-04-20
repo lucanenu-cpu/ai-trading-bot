@@ -99,11 +99,36 @@ def api_recommendation(symbol: str):
     """
     Return a unified actionable signal with BUY/SELL/HOLD action,
     allocation recommendation, SL/TP levels, and reasons.
+
+    The response is enriched with TradingView resolution info (exchange,
+    type) and TradingView's technical consensus so the frontend can embed
+    the matching TradingView chart and display data consistent with it.
     """
     try:
         symbol = symbol.upper()
         from ai_advisor import get_actionable_signal
         signal = get_actionable_signal(symbol)
+
+        # Best-effort TradingView enrichment so the UI can always render a chart
+        # and show the same price/consensus that TradingView shows.
+        try:
+            from tradingview import search_symbol, get_technical_analysis
+            match = search_symbol(symbol)
+            if match:
+                tv_analysis = get_technical_analysis(
+                    match["symbol"], match.get("exchange", ""), match.get("type", "stock")
+                )
+                signal["resolved"] = {
+                    "symbol": match["symbol"],
+                    "yfinance_symbol": symbol,
+                    "exchange": match.get("exchange", ""),
+                    "type": match.get("type", ""),
+                    "description": match.get("description", ""),
+                }
+                signal["tradingview"] = tv_analysis
+        except Exception:  # never fail the signal because of TV enrichment
+            logger.exception("TradingView enrichment failed for %s", symbol)
+
         return jsonify({"success": True, **signal})
     except Exception as exc:
         logger.exception("Error generating actionable signal for %s", symbol)

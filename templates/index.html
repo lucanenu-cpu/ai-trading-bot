@@ -83,11 +83,15 @@
                 <span class="res-symbol" id="res-symbol">—</span>
                 <span class="res-price" id="res-price">—</span>
               </div>
-              <div class="res-updated" id="res-updated"></div>
+              <div class="res-meta">
+                <span class="res-exchange" id="res-exchange"></span>
+                <span class="res-updated" id="res-updated"></span>
+              </div>
             </div>
             <div class="action-center">
               <div class="action-badge" id="res-action">—</div>
               <div class="action-sub" id="res-action-sub"></div>
+              <div class="tv-consensus" id="res-tv-consensus"></div>
             </div>
             <div class="action-right">
               <div class="alloc-block">
@@ -96,6 +100,17 @@
                 <div class="alloc-pct" id="res-alloc-pct">—</div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- TradingView chart -->
+        <div class="card chart-card full-width">
+          <div class="chart-header">
+            <h3>📈 TradingView Chart</h3>
+            <span class="chart-note" id="chart-note">Live chart — data matches the numbers shown above.</span>
+          </div>
+          <div class="tv-chart-wrap">
+            <div id="tv-chart-container" class="tv-chart-container"></div>
           </div>
         </div>
 

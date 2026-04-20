@@ -19,11 +19,15 @@
   --green: #3fb950;
   --red: #f85149;
   --yellow: #d29922;
-  --radius: 10px;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.25);
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(88,166,255,0.08), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(63,185,80,0.06), transparent 60%),
+    var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.6;
@@ -106,7 +110,7 @@ header {
 /* ── Main ── */
 main {
   flex: 1;
-  max-width: 960px;
+  max-width: 1180px;
   width: 100%;
   margin: 1.5rem auto;
   padding: 0 1.25rem;
@@ -220,10 +224,11 @@ button:active { transform: scale(0.97); }
 
 /* ── Cards ── */
 .card {
-  background: var(--surface);
+  background: linear-gradient(180deg, var(--surface), #13181f);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem;
+  box-shadow: var(--shadow);
 }
 .card h3 {
   font-size: 0.88rem;
@@ -609,5 +614,96 @@ footer strong { color: var(--yellow); }
 @media (max-width: 420px) {
   .kpi-row { grid-template-columns: 1fr 1fr; }
   .settings-grid { grid-template-columns: 1fr; }
+}
+
+/* ══════════════════════════════════════════
+   TRADINGVIEW CHART CARD
+   ══════════════════════════════════════════ */
+.chart-card {
+  padding: 1rem 1rem 0.75rem;
+}
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.chart-header h3 {
+  margin-bottom: 0;
+}
+.chart-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.tv-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 520px;
+  border-radius: calc(var(--radius) - 4px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #0d1117;
+}
+.tv-chart-container {
+  position: absolute;
+  inset: 0;
+}
+.tv-chart-container iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: 0;
+}
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Meta line under symbol (exchange / description / type) */
+.res-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.res-exchange {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* TradingView consensus badge under action badge */
+.tv-consensus {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.tv-consensus:empty { display: none; }
+.tv-consensus.cons-strong-buy  { color: var(--green);  border-color: var(--green);  background: rgba(63,185,80,0.18); }
+.tv-consensus.cons-buy         { color: var(--green);  border-color: rgba(63,185,80,0.6); background: rgba(63,185,80,0.1); }
+.tv-consensus.cons-strong-sell { color: var(--red);    border-color: var(--red);    background: rgba(248,81,73,0.18); }
+.tv-consensus.cons-sell        { color: var(--red);    border-color: rgba(248,81,73,0.6); background: rgba(248,81,73,0.1); }
+.tv-consensus.cons-neutral     { color: var(--yellow); border-color: rgba(210,153,34,0.5); background: rgba(210,153,34,0.1); }
+
+/* Action badge subtle glow for stronger visual */
+.action-badge.buy,
+.action-badge.strong-buy  { box-shadow: 0 0 0 1px rgba(63,185,80,0.25), 0 6px 18px -8px rgba(63,185,80,0.5); }
+.action-badge.sell,
+.action-badge.strong-sell { box-shadow: 0 0 0 1px rgba(248,81,73,0.25), 0 6px 18px -8px rgba(248,81,73,0.5); }
+.action-badge.hold        { box-shadow: 0 0 0 1px rgba(210,153,34,0.25), 0 6px 18px -8px rgba(210,153,34,0.4); }
+
+@media (max-width: 700px) {
+  .tv-chart-wrap { height: 380px; }
 }
 
