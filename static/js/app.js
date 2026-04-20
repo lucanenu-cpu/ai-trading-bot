@@ -699,11 +699,17 @@
   // ------------------------------------------------------------------
   // Chart loading / error state helpers
   // ------------------------------------------------------------------
-  function showChartLoading() {
+  function _clearChartContainer() {
     const container = document.getElementById("tv-chart-container");
-    if (!container) return;
+    if (!container) return null;
     container.className = "tv-chart-container";
     container.innerHTML = "";
+    return container;
+  }
+
+  function showChartLoading() {
+    const container = _clearChartContainer();
+    if (!container) return;
     const wrap = document.createElement("div");
     wrap.className = "chart-loading";
     const spin = document.createElement("div");
@@ -716,10 +722,8 @@
   }
 
   function showChartError(msg) {
-    const container = document.getElementById("tv-chart-container");
+    const container = _clearChartContainer();
     if (!container) return;
-    container.className = "tv-chart-container";
-    container.innerHTML = "";
     const div = document.createElement("div");
     div.className = "chart-empty";
     div.textContent = msg || "Chart unavailable.";
