@@ -14,6 +14,14 @@ and position-sizing recommendations.
 
 ---
 
+## 🚀 Live Demo (Railway)
+
+**Public URL:** https://ai-trading-bot-production.up.railway.app
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/ai-trading-bot?referralCode=deploy)
+
+---
+
 ## Architecture
 
 ```
@@ -88,6 +96,35 @@ python server.py
 docker build -t ai-trading-bot .
 docker run -p 8080:8080 --env-file .env ai-trading-bot
 ```
+
+### Deploy to Railway
+
+1. **Fork / push this repo to GitHub.**
+
+2. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select this repo.
+
+3. Railway auto-detects the `Dockerfile` and builds the image.
+
+4. Add environment variables in **Railway → Variables** (only the ones you need):
+
+   | Variable | Required? | Notes |
+   |---|---|---|
+   | `OPENAI_API_KEY` | Optional | Enables AI-refined signals |
+   | `NEWS_API_KEY` | Optional | Enables news sentiment |
+   | `TELEGRAM_BOT_TOKEN` | Optional | Telegram alerts |
+   | `TELEGRAM_CHAT_ID` | Optional | Telegram alerts |
+   | `ACCOUNT_BALANCE_USD` | Optional | Default `10` |
+   | `AI_ENABLED` | Optional | `true` / `false` |
+
+   > Railway sets the `PORT` variable automatically — no manual configuration needed.
+
+5. Click **Deploy**. Once the build finishes, Railway provides a public URL:
+   ```
+   https://<your-app-name>.up.railway.app
+   ```
+
+6. Open the URL in your browser. You should see the trading-bot UI.  
+   Type any ticker (e.g. `AAPL`, `BTC-USD`) and click **Analyze** to get a live BUY/SELL/HOLD recommendation.
 
 ---
 
