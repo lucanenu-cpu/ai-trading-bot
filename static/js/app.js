@@ -234,10 +234,14 @@
     // ── Allocation ──
     const allocUsd = risk.allocation_usd != null ? risk.allocation_usd : 0;
     const allocPct = risk.allocation_pct != null ? risk.allocation_pct : 0;
-    setText("res-alloc-usd", action === "HOLD" ? "$0.00" : formatPrice(allocUsd));
-    setText("res-alloc-pct", action === "HOLD" ? "No position" : `${allocPct.toFixed(1)}% of balance`);
+    setText("res-alloc-usd", formatPrice(allocUsd));
+    setText("res-alloc-pct", action === "HOLD"
+      ? `${allocPct.toFixed(1)}% — no active signal`
+      : `${allocPct.toFixed(1)}% of balance`);
 
     // ── Trade levels ──
+    // Always display entry/SL/TP — the backend computes them regardless of action.
+    // When action is HOLD, they are shown as reference levels (grayed out).
     const entry = risk.entry  != null ? risk.entry  : price;
     const sl    = risk.stop_loss   != null ? risk.stop_loss   : 0;
     const tp    = risk.take_profit != null ? risk.take_profit : 0;
@@ -245,10 +249,22 @@
     const tpPct = risk.take_profit_pct != null ? risk.take_profit_pct : 0;
 
     setText("res-entry", formatPrice(entry));
-    setText("res-sl", action === "HOLD" ? "—" : formatPrice(sl));
-    setText("res-sl-pct", action === "HOLD" ? "" : `-${slPct.toFixed(1)}%`);
-    setText("res-tp", action === "HOLD" ? "—" : formatPrice(tp));
-    setText("res-tp-pct", action === "HOLD" ? "" : `+${tpPct.toFixed(1)}%`);
+    setText("res-sl",    sl > 0 ? formatPrice(sl) : "—");
+    setText("res-sl-pct", sl > 0 ? `-${slPct.toFixed(1)}%` : "");
+    setText("res-tp",    tp > 0 ? formatPrice(tp) : "—");
+    setText("res-tp-pct", tp > 0 ? `+${tpPct.toFixed(1)}%` : "");
+
+    // Update the levels card header and dim values when action is HOLD
+    const levelsCard = document.querySelector(".levels-card");
+    if (levelsCard) {
+      levelsCard.classList.toggle("levels-hold", action === "HOLD");
+      const levelsH3 = levelsCard.querySelector("h3");
+      if (levelsH3) {
+        levelsH3.textContent = action === "HOLD"
+          ? "📍 Reference Levels (no active trade)"
+          : "📍 Trade Levels";
+      }
+    }
 
     // ── Score gauge ──
     const scoreEl = document.getElementById("res-score");
