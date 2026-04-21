@@ -342,7 +342,7 @@
     if (exch) {
       tvSymbol = `${exch}:${sym}`;
     } else if (type === "crypto") {
-      // Strip any hyphen suffix and use Binance as default exchange.
+      // Strip hyphens from the symbol (e.g. BTC-USD → BTCUSD) and use Binance as default exchange.
       tvSymbol = `BINANCE:${sym.replace(/-/g, "")}`;
     } else {
       tvSymbol = sym;
@@ -377,7 +377,7 @@
     iframe.style.width = "100%";
     iframe.style.height = "100%";
     iframe.style.border = "0";
-    iframe.title = `${tvSymbol} live chart`;
+    iframe.title = `TradingView live chart for ${(resolved && resolved.description) ? resolved.description + " (" + tvSymbol + ")" : tvSymbol}`;
     iframe.allow = "fullscreen";
     iframe.loading = "lazy";
     container.appendChild(iframe);
