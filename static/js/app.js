@@ -234,10 +234,18 @@
     // ── Allocation ──
     const allocUsd = risk.allocation_usd != null ? risk.allocation_usd : 0;
     const allocPct = risk.allocation_pct != null ? risk.allocation_pct : 0;
-    setText("res-alloc-usd", action === "HOLD" ? "$0.00" : formatPrice(allocUsd));
-    setText("res-alloc-pct", action === "HOLD" ? "No position" : `${allocPct.toFixed(1)}% of balance`);
+    const allocLabelEl = document.querySelector(".alloc-label");
+    if (action === "HOLD") {
+      setText("res-alloc-usd", "—");
+      setText("res-alloc-pct", "No active position");
+      if (allocLabelEl) allocLabelEl.textContent = "Suggested amount";
+    } else {
+      setText("res-alloc-usd", formatPrice(allocUsd));
+      setText("res-alloc-pct", `${allocPct.toFixed(1)}% of balance`);
+      if (allocLabelEl) allocLabelEl.textContent = action === "SELL" ? "Position to close" : "💰 Invest now";
+    }
 
-    // ── Trade levels ──
+    // ── Trade levels — always show so user can see entry/SL/TP ──
     const entry = risk.entry  != null ? risk.entry  : price;
     const sl    = risk.stop_loss   != null ? risk.stop_loss   : 0;
     const tp    = risk.take_profit != null ? risk.take_profit : 0;
@@ -245,10 +253,16 @@
     const tpPct = risk.take_profit_pct != null ? risk.take_profit_pct : 0;
 
     setText("res-entry", formatPrice(entry));
-    setText("res-sl", action === "HOLD" ? "—" : formatPrice(sl));
-    setText("res-sl-pct", action === "HOLD" ? "" : `-${slPct.toFixed(1)}%`);
-    setText("res-tp", action === "HOLD" ? "—" : formatPrice(tp));
-    setText("res-tp-pct", action === "HOLD" ? "" : `+${tpPct.toFixed(1)}%`);
+    setText("res-sl", sl > 0 ? formatPrice(sl) : "—");
+    setText("res-sl-pct", sl > 0 ? `-${slPct.toFixed(1)}%` : "");
+    setText("res-tp", tp > 0 ? formatPrice(tp) : "—");
+    setText("res-tp-pct", tp > 0 ? `+${tpPct.toFixed(1)}%` : "");
+
+    // Label the levels card: "reference only" when HOLD
+    const levelsNoteEl = document.getElementById("res-levels-note");
+    if (levelsNoteEl) {
+      levelsNoteEl.textContent = action === "HOLD" ? "(reference — no trade)" : "";
+    }
 
     // ── Score gauge ──
     const scoreEl = document.getElementById("res-score");
@@ -305,9 +319,9 @@
   }
 
   // ------------------------------------------------------------------
-  // Embed the TradingView Advanced Chart widget.
-  // Builds "EXCHANGE:SYMBOL" when we have one (from resolved), otherwise
-  // falls back to the raw ticker — TradingView will auto-resolve.
+  // Embed the TradingView Advanced Chart widget via iframe.
+  // The iframe approach is more reliable than dynamic script injection
+  // (no document.currentScript issues with async/dynamic scripts).
   // ------------------------------------------------------------------
   function renderTradingViewChart(resolved, rawSymbol) {
     const container = document.getElementById("tv-chart-container");
@@ -328,46 +342,45 @@
     if (exch) {
       tvSymbol = `${exch}:${sym}`;
     } else if (type === "crypto") {
-      // Strip any hyphen and assume Binance (very common; TV will fall back
-      // gracefully if Binance doesn't list it).
+      // Strip any hyphen suffix and use Binance as default exchange.
       tvSymbol = `BINANCE:${sym.replace(/-/g, "")}`;
     } else {
       tvSymbol = sym;
     }
 
-    // Recreate container to fully reset any previous widget.
-    container.innerHTML = "";
-    const widgetDiv = document.createElement("div");
-    widgetDiv.className = "tradingview-widget-container__widget";
-    widgetDiv.style.height = "100%";
-    widgetDiv.style.width = "100%";
-    container.appendChild(widgetDiv);
+    // Build iframe embed URL — this is guaranteed to work regardless of
+    // browser script execution restrictions.
+    const studies = encodeURIComponent(JSON.stringify([
+      "RSI@tv-basicstudies",
+      "MACD@tv-basicstudies",
+    ]));
+    const iframeSrc = [
+      "https://www.tradingview.com/widgetembed/",
+      `?symbol=${encodeURIComponent(tvSymbol)}`,
+      "&interval=60",
+      "&hidesidetoolbar=0",
+      "&saveimage=0",
+      "&toolbarbg=161b22",
+      `&studies=${studies}`,
+      "&theme=dark",
+      "&style=1",
+      "&timezone=exchange",
+      "&withdateranges=1",
+      "&locale=en",
+      "&hideideas=1",
+    ].join("");
 
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.async = true;
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.innerHTML = JSON.stringify({
-      autosize: true,
-      symbol: tvSymbol,
-      interval: "60",
-      timezone: "Etc/UTC",
-      theme: "dark",
-      style: "1",
-      locale: "en",
-      toolbar_bg: "#0d1117",
-      enable_publishing: false,
-      allow_symbol_change: true,
-      hide_side_toolbar: false,
-      withdateranges: true,
-      studies: [
-        "STD;EMA%Cross",
-        "STD;RSI",
-        "STD;MACD",
-      ],
-      support_host: "https://www.tradingview.com",
-    });
-    container.appendChild(script);
+    // Recreate container to fully reset any previous chart.
+    container.innerHTML = "";
+    const iframe = document.createElement("iframe");
+    iframe.src = iframeSrc;
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "0";
+    iframe.title = `${tvSymbol} live chart`;
+    iframe.allow = "fullscreen";
+    iframe.loading = "lazy";
+    container.appendChild(iframe);
   }
 
   function tvConsensusClass(rec) {
