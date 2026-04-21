@@ -20,6 +20,7 @@ for _dep in [
     "ta", "ta.trend", "ta.momentum", "ta.volatility", "ta.volume",
     "sklearn", "sklearn.model_selection",
     "xgboost",
+    "openai",
     "requests",
     "feedparser",
     "bs4", "beautifulsoup4",

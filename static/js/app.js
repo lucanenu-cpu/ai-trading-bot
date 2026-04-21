@@ -8,14 +8,18 @@
   // ------------------------------------------------------------------
   // DOM refs
   // ------------------------------------------------------------------
-  const symbolInput    = document.getElementById("symbol-input");
-  const analyzeBtn     = document.getElementById("analyze-btn");
-  const recommendBtn   = document.getElementById("recommend-btn");
-  const errorMsg       = document.getElementById("error-msg");
-  const loading        = document.getElementById("loading");
-  const results        = document.getElementById("results");
-  const watchlistChips = document.getElementById("watchlist-chips");
-  const resRec         = document.getElementById("res-recommendation");
+  const symbolInput      = document.getElementById("symbol-input");
+  const timeframeSelect  = document.getElementById("timeframe-select");
+  const analyzeBtn       = document.getElementById("analyze-btn");
+  const recommendBtn     = document.getElementById("recommend-btn");
+  const errorMsg         = document.getElementById("error-msg");
+  const loading          = document.getElementById("loading");
+  const results          = document.getElementById("results");
+  const watchlistChips   = document.getElementById("watchlist-chips");
+  const resRec           = document.getElementById("res-recommendation");
+
+  // Chart.js instance (reused across renders)
+  let _chartInstance = null;
 
   // Search mode: "symbol" or "ask"
   let searchMode = "symbol";
@@ -308,14 +312,17 @@
   // Embed the TradingView Advanced Chart widget.
   // Builds "EXCHANGE:SYMBOL" when we have one (from resolved), otherwise
   // falls back to the raw ticker — TradingView will auto-resolve.
+  // Falls back to Chart.js if the TradingView script fails to load.
   // ------------------------------------------------------------------
   function renderTradingViewChart(resolved, rawSymbol) {
     const container = document.getElementById("tv-chart-container");
+    const canvas    = document.getElementById("chartjs-canvas");
     if (!container) return;
 
-    const sym = (resolved && resolved.symbol) ? resolved.symbol : (rawSymbol || "").toUpperCase();
+    const sym  = (resolved && resolved.symbol) ? resolved.symbol : (rawSymbol || "").toUpperCase();
     const exch = resolved && resolved.exchange ? resolved.exchange.toUpperCase() : "";
     const type = resolved && resolved.type ? resolved.type : "";
+    const interval = (timeframeSelect && timeframeSelect.value) ? timeframeSelect.value : "60";
 
     if (!sym) {
       container.innerHTML = '<div class="chart-empty">No chart available.</div>';
@@ -335,8 +342,13 @@
       tvSymbol = sym;
     }
 
+    // Reset Chart.js canvas so it is hidden while TV loads.
+    if (canvas) canvas.classList.add("hidden");
+    if (_chartInstance) { _chartInstance.destroy(); _chartInstance = null; }
+
     // Recreate container to fully reset any previous widget.
     container.innerHTML = "";
+    container.classList.remove("hidden");
     const widgetDiv = document.createElement("div");
     widgetDiv.className = "tradingview-widget-container__widget";
     widgetDiv.style.height = "100%";
@@ -347,10 +359,10 @@
     script.type = "text/javascript";
     script.async = true;
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.innerHTML = JSON.stringify({
+    script.text = JSON.stringify({
       autosize: true,
       symbol: tvSymbol,
-      interval: "60",
+      interval: interval,
       timezone: "Etc/UTC",
       theme: "dark",
       style: "1",
@@ -367,7 +379,117 @@
       ],
       support_host: "https://www.tradingview.com",
     });
+
+    // If the TradingView script fails to load, fall back to Chart.js.
+    script.onerror = function () {
+      renderChartJsFallback(sym, interval, container, canvas);
+    };
+
     container.appendChild(script);
+  }
+
+  // ------------------------------------------------------------------
+  // Chart.js fallback — fetches OHLCV data from /chart/<symbol> and
+  // renders a candlestick-style line chart.
+  // ------------------------------------------------------------------
+  function renderChartJsFallback(symbol, interval, tvContainer, canvas) {
+    if (!canvas) return;
+
+    // Hide the (empty) TradingView container; show the canvas.
+    tvContainer.classList.add("hidden");
+    canvas.classList.remove("hidden");
+
+    const note = document.getElementById("chart-note");
+    if (note) note.textContent = "Chart.js fallback — loading historical data…";
+
+    fetch(`/chart/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.success || !data.candles || data.candles.length === 0) {
+          canvas.classList.add("hidden");
+          tvContainer.classList.remove("hidden");
+          tvContainer.innerHTML = '<div class="chart-empty">Chart data unavailable.</div>';
+          return;
+        }
+
+        if (note) note.textContent = `Chart.js fallback · ${data.candle_count} bars · interval ${interval}`;
+
+        const _labelFmt = { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" };
+        const labels = data.candles.map((c) => new Date(c.time * 1000).toLocaleString(undefined, _labelFmt));
+        const closes = data.candles.map((c) => c.close);
+        const opens  = data.candles.map((c) => c.open);
+
+        // Color each bar green (up) or red (down).
+        const barColors = data.candles.map((c) =>
+          c.close >= c.open ? "rgba(63,185,80,0.7)" : "rgba(248,81,73,0.7)"
+        );
+        const barBorder = data.candles.map((c) =>
+          c.close >= c.open ? "rgba(63,185,80,1)" : "rgba(248,81,73,1)"
+        );
+
+        if (_chartInstance) { _chartInstance.destroy(); _chartInstance = null; }
+
+        const ctx = canvas.getContext("2d");
+        _chartInstance = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: `${symbol} Close`,
+                data: closes,
+                backgroundColor: barColors,
+                borderColor: barBorder,
+                borderWidth: 1,
+                borderRadius: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const c = data.candles[ctx.dataIndex];
+                    return [
+                      `O: ${c.open}  H: ${c.high}`,
+                      `L: ${c.low}   C: ${c.close}`,
+                      `Vol: ${c.volume.toLocaleString()}`,
+                    ];
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                display: true,
+                ticks: {
+                  color: "#8b949e",
+                  maxTicksLimit: 8,
+                  maxRotation: 0,
+                  font: { size: 11 },
+                },
+                grid: { color: "rgba(48,54,61,0.6)" },
+              },
+              y: {
+                display: true,
+                position: "right",
+                ticks: { color: "#8b949e", font: { size: 11 } },
+                grid: { color: "rgba(48,54,61,0.6)" },
+              },
+            },
+          },
+        });
+      })
+      .catch(() => {
+        canvas.classList.add("hidden");
+        tvContainer.classList.remove("hidden");
+        tvContainer.innerHTML = '<div class="chart-empty">Chart data unavailable.</div>';
+      });
   }
 
   function tvConsensusClass(rec) {

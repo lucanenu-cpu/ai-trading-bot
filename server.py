@@ -44,6 +44,104 @@ def index():
     return render_template("index.html")
 
 
+# ---------------------------------------------------------------------------
+# Interval → yfinance (period, interval) mapping
+# Keys are TradingView-style interval strings used by the UI.
+# ---------------------------------------------------------------------------
+_CHART_INTERVAL_MAP: dict[str, tuple[str, str]] = {
+    "1":   ("1d",  "1m"),
+    "5":   ("5d",  "5m"),
+    "15":  ("5d",  "15m"),
+    "30":  ("1mo", "30m"),
+    "60":  ("1mo", "60m"),
+    "240": ("3mo", "1h"),   # yfinance has no native 4h; 1h is the closest
+    "D":   ("1y",  "1d"),
+    "W":   ("5y",  "1wk"),
+}
+
+
+@app.route("/chart/<symbol>")
+def chart_data(symbol: str):
+    """Return OHLCV candlestick data for a symbol so the frontend can render
+    a Chart.js chart as a TradingView fallback.
+
+    Query parameters
+    ----------------
+    interval : str
+        Bar interval in TradingView notation: ``1``, ``5``, ``15``, ``30``,
+        ``60``, ``240``, ``D``, ``W``.  Defaults to ``60`` (1-hour bars).
+    period : str
+        yfinance look-back period string (``1d``, ``5d``, ``1mo``, ``3mo``,
+        ``1y``, ``5y``).  When omitted the interval-specific default is used.
+
+    Response (success)
+    ------------------
+    .. code-block:: json
+
+        {
+            "success": true,
+            "symbol": "AAPL",
+            "interval": "60",
+            "period": "1mo",
+            "candle_count": 480,
+            "current_price": 213.5,
+            "candles": [
+                {"time": 1713801600, "open": 211.0, "high": 214.2,
+                 "low": 210.5, "close": 213.5, "volume": 1234567}
+            ]
+        }
+    """
+    symbol = symbol.upper()
+    interval_str = request.args.get("interval", "60").strip()
+
+    yf_period_default, yf_interval = _CHART_INTERVAL_MAP.get(
+        interval_str, ("1mo", "60m")
+    )
+    yf_period = request.args.get("period", yf_period_default).strip() or yf_period_default
+
+    try:
+        import yfinance as yf
+
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=yf_period, interval=yf_interval)
+
+        if hist is None or (hasattr(hist, "empty") and hist.empty):
+            return jsonify({"success": False, "error": f"No chart data found for {symbol}."}), 404
+
+        candles = []
+        for ts, row in hist.iterrows():
+            try:
+                t = int(ts.timestamp())
+            except Exception:
+                continue
+            candles.append({
+                "time":   t,
+                "open":   round(float(row["Open"]),   4),
+                "high":   round(float(row["High"]),   4),
+                "low":    round(float(row["Low"]),    4),
+                "close":  round(float(row["Close"]),  4),
+                "volume": int(row.get("Volume", 0) or 0),
+            })
+
+        if not candles:
+            return jsonify({"success": False, "error": f"No chart data found for {symbol}."}), 404
+
+        current_price = candles[-1]["close"]
+
+        return jsonify({
+            "success":       True,
+            "symbol":        symbol,
+            "interval":      interval_str,
+            "period":        yf_period,
+            "candle_count":  len(candles),
+            "current_price": current_price,
+            "candles":       candles,
+        })
+    except Exception as exc:
+        logger.exception("Error fetching chart data for %s", symbol)
+        return jsonify({"success": False, "error": "Chart data fetch failed. Please try again."}), 500
+
+
 @app.route("/analyze/<symbol>")
 def analyze(symbol: str):
     """Run full analysis for a symbol and return JSON."""
