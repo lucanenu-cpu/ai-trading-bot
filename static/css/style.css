@@ -162,6 +162,25 @@ main {
 }
 #symbol-input:focus { border-color: var(--accent); }
 
+#timeframe-select {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 64px;
+  text-align: center;
+}
+#timeframe-select:focus { border-color: var(--accent); }
+#timeframe-select:hover { border-color: var(--accent); }
+
 button {
   padding: 0.65rem 1.25rem;
   border: none;
@@ -662,6 +681,15 @@ footer strong { color: var(--yellow); }
   height: 100%;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+/* Chart.js fallback canvas — fills the same container as the TV widget */
+.chartjs-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  background: #0d1117;
 }
 
 /* Meta line under symbol (exchange / description / type) */
