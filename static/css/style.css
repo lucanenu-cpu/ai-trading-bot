@@ -307,6 +307,11 @@ button:active { transform: scale(0.97); }
 .level-item.sl .level-pct { color: var(--red); }
 .level-item.tp .level-pct { color: var(--green); }
 
+/* ── Trade levels – HOLD reference state ── */
+.levels-card.levels-hold .level-value,
+.levels-card.levels-hold .level-pct { opacity: 0.45; }
+.levels-card.levels-hold .level-item { border-left-color: var(--text-muted) !important; }
+
 /* ── Score card ── */
 .score-row { display: flex; gap: 1.5rem; align-items: center; }
 .score-gauge-wrap { position: relative; width: 130px; flex-shrink: 0; }
