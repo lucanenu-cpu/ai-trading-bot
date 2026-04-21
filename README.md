@@ -14,6 +14,49 @@ and position-sizing recommendations.
 
 ---
 
+## 🚀 Unde vezi aplicația / How to Access the App
+
+> **Română:** Rulează comanda de mai jos în terminal și deschide browserul la adresa indicată.
+
+### ▶️ Local (cel mai simplu / easiest)
+
+```bash
+# 1. Instalează dependențele (o singură dată)
+pip install -r requirements.txt
+
+# 2. Pornește serverul
+python server.py
+
+# 3. Deschide browserul la:
+#    http://localhost:8080
+```
+
+**Deschide:** [http://localhost:8080](http://localhost:8080)
+
+Vei vedea interfața AI Trading Bot cu:
+- Tab **🔍 Analyze** — introdu un simbol (ex. `AAPL`, `BTC-USD`) și apasă **⚡ Analyze**
+- Primești recomandare **BUY / SELL / HOLD**, sumă sugerată, Entry, Stop-Loss, Take-Profit
+- Grafic TradingView live integrat
+- Tab **📊 Dashboard** — starea botului, poziții deschise, istoric tranzacții
+- Tab **⚙️ Settings** — configurare risc / strategie
+
+### 🐳 Docker
+
+```bash
+docker build -t ai-trading-bot .
+docker run -p 8080:8080 --env-file .env ai-trading-bot
+# Deschide: http://localhost:8080
+```
+
+### ☁️ Railway (deployment în cloud)
+
+1. Conectează repo-ul la [railway.app](https://railway.app) → **New Project → Deploy from GitHub repo**
+2. Setează variabilele de mediu din `.env.example` în panoul Railway → **Variables**
+3. Railway detectează automat `Dockerfile` și deployează
+4. URL-ul aplicației apare în dashboard Railway (ex. `https://ai-trading-bot-production.up.railway.app`)
+
+---
+
 ## Architecture
 
 ```
@@ -60,22 +103,24 @@ market_analyzer  news_sentiment     notifications
 
 ## Quick Start
 
+> See the **[🚀 Unde vezi aplicația / How to Access the App](#-unde-vezi-aplicația--how-to-access-the-app)** section above for the fastest way to run and view the bot.
+
 ### Prerequisites
 - Python 3.10+
 - (Optional) Docker
 
-### Local setup
+### First-time setup (clone + env vars)
 
 ```bash
 git clone https://github.com/lucanenu-cpu/ai-trading-bot
 cd ai-trading-bot
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy and edit environment variables
+# Copy and edit environment variables (API keys are optional)
 cp .env.example .env
 # edit .env with your keys
+
+# Install dependencies
+pip install -r requirements.txt
 
 # Start the server
 python server.py
@@ -87,6 +132,7 @@ python server.py
 ```bash
 docker build -t ai-trading-bot .
 docker run -p 8080:8080 --env-file .env ai-trading-bot
+# Open http://localhost:8080
 ```
 
 ---
