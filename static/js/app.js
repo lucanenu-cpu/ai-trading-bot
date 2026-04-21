@@ -298,14 +298,26 @@
     }
 
     // ── Embedded TradingView chart ──
-    const tfSelect = document.getElementById("timeframe-select");
-    const tfLabel = tfSelect ? tfSelect.options[tfSelect.selectedIndex].text : "1h";
     const chartNote = document.getElementById("chart-note");
-    if (chartNote) chartNote.textContent = `Live chart · ${tfLabel} timeframe — data matches the numbers shown above.`;
+    if (chartNote) chartNote.textContent = `Live chart · ${getSelectedTimeframeLabel()} timeframe — data matches the numbers shown above.`;
     renderTradingViewChart(resolved, data.symbol);
 
     // Update header status after a signal load
     refreshHeaderStatus();
+  }
+
+  // ------------------------------------------------------------------
+  // Timeframe helpers — read the current user-selected timeframe from the
+  // dropdown once and expose value + label through two small helpers.
+  // ------------------------------------------------------------------
+  function getSelectedTimeframeValue() {
+    const sel = document.getElementById("timeframe-select");
+    return sel ? sel.value : "60";
+  }
+
+  function getSelectedTimeframeLabel() {
+    const sel = document.getElementById("timeframe-select");
+    return sel ? sel.options[sel.selectedIndex].text : "1h";
   }
 
   // ------------------------------------------------------------------
@@ -326,9 +338,8 @@
       return;
     }
 
-    // Read the user-selected timeframe from the dropdown.
-    const tfSelect = document.getElementById("timeframe-select");
-    const interval = tfSelect ? tfSelect.value : "60";
+    // Read the user-selected timeframe via the shared helper.
+    const interval = getSelectedTimeframeValue();
 
     // Build the TradingView ticker: prefer EXCHANGE:SYMBOL when we know the
     // exchange; for crypto fall back to a sensible default.
@@ -355,7 +366,7 @@
     script.type = "text/javascript";
     script.async = true;
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.innerHTML = JSON.stringify({
+    script.textContent = JSON.stringify({
       autosize: true,
       symbol: tvSymbol,
       interval: interval,
