@@ -82,12 +82,36 @@ python server.py
 # Open http://localhost:8080
 ```
 
+### Demo flow (local)
+
+1. Open `http://localhost:8080` in your browser.
+2. In the **Analyze** tab, type a symbol (e.g. `AAPL`, `BTC-USD`, `SPY`).
+3. Select a **timeframe** from the dropdown (1m / 5m / 15m / 30m / **1h** / 4h / 1D / 1W).
+4. Click **⚡ Analyze**.
+5. The TradingView live chart loads at the selected timeframe.
+6. You receive a clear **BUY / SELL / HOLD** signal with score, entry price, stop-loss, and take-profit.
+7. The suggested investment amount (USD + % of balance) is shown alongside.
+8. Scroll down to see the AI reasoning bullets and optionally click **Get AI Recommendation** for a deeper GPT analysis.
+
 ### Docker
 
 ```bash
 docker build -t ai-trading-bot .
 docker run -p 8080:8080 --env-file .env ai-trading-bot
 ```
+
+### Deploy to Railway
+
+1. Create a free account at <https://railway.app>.
+2. Click **New Project** → **Deploy from GitHub repo** → select `lucanenu-cpu/ai-trading-bot`.
+3. Railway auto-detects Python and runs `pip install -r requirements.txt`.
+4. Go to the **Variables** tab and add your env vars (see [Configuration Variables](#configuration-variables) below).
+   - At minimum: `PORT=8080` (Railway injects this automatically), optionally `OPENAI_API_KEY`.
+5. Under **Settings → Networking**, expose port `8080` and Railway will give you a public URL.
+6. Visit your Railway URL — the bot is live with the same UI and all features.
+
+> **Tip:** The bot works without any API keys — it uses technical analysis + XGBoost ML only.
+> Add `OPENAI_API_KEY` to enable the optional GPT deep-analysis feature.
 
 ---
 
