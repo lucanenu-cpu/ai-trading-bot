@@ -162,6 +162,25 @@ main {
 }
 #symbol-input:focus { border-color: var(--accent); }
 
+#timeframe-select {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  min-width: 70px;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
+}
+#timeframe-select:focus { border-color: var(--accent); }
+#timeframe-select option { background: var(--surface2); }
+
 button {
   padding: 0.65rem 1.25rem;
   border: none;

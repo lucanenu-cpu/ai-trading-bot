@@ -56,6 +56,16 @@
             placeholder="Symbol — e.g. AAPL, BTC-USD, SPY"
             autocomplete="off"
           />
+          <select id="timeframe-select" title="Chart timeframe">
+            <option value="1">1m</option>
+            <option value="5">5m</option>
+            <option value="15">15m</option>
+            <option value="30">30m</option>
+            <option value="60" selected>1h</option>
+            <option value="240">4h</option>
+            <option value="D">1D</option>
+            <option value="W">1W</option>
+          </select>
           <button id="analyze-btn">⚡ Analyze</button>
         </div>
         <div id="error-msg" class="error-msg hidden"></div>

@@ -298,6 +298,10 @@
     }
 
     // ── Embedded TradingView chart ──
+    const tfSelect = document.getElementById("timeframe-select");
+    const tfLabel = tfSelect ? tfSelect.options[tfSelect.selectedIndex].text : "1h";
+    const chartNote = document.getElementById("chart-note");
+    if (chartNote) chartNote.textContent = `Live chart · ${tfLabel} timeframe — data matches the numbers shown above.`;
     renderTradingViewChart(resolved, data.symbol);
 
     // Update header status after a signal load
@@ -321,6 +325,10 @@
       container.innerHTML = '<div class="chart-empty">No chart available.</div>';
       return;
     }
+
+    // Read the user-selected timeframe from the dropdown.
+    const tfSelect = document.getElementById("timeframe-select");
+    const interval = tfSelect ? tfSelect.value : "60";
 
     // Build the TradingView ticker: prefer EXCHANGE:SYMBOL when we know the
     // exchange; for crypto fall back to a sensible default.
@@ -350,7 +358,7 @@
     script.innerHTML = JSON.stringify({
       autosize: true,
       symbol: tvSymbol,
-      interval: "60",
+      interval: interval,
       timezone: "Etc/UTC",
       theme: "dark",
       style: "1",
