@@ -18,7 +18,9 @@ and position-sizing recommendations.
 
 **Public URL:** https://ai-trading-bot-production.up.railway.app
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/ai-trading-bot?referralCode=deploy)
+> Open the URL, type a ticker (e.g. `AAPL`, `BTC-USD`, `TSLA`) and click **Analyze** to get a live BUY/SELL/HOLD signal with entry, stop-loss, take-profit, and reasoning.
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/lucanenu-cpu/ai-trading-bot)
 
 ---
 
@@ -95,36 +97,50 @@ python server.py
 ```bash
 docker build -t ai-trading-bot .
 docker run -p 8080:8080 --env-file .env ai-trading-bot
+# Open http://localhost:8080
 ```
 
 ### Deploy to Railway
 
-1. **Fork / push this repo to GitHub.**
+1. **Push this repo to GitHub** (or fork it).
 
 2. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select this repo.
 
 3. Railway auto-detects the `Dockerfile` and builds the image.
 
-4. Add environment variables in **Railway → Variables** (only the ones you need):
+4. Add environment variables in **Railway → Variables** (all optional):
 
    | Variable | Required? | Notes |
    |---|---|---|
-   | `OPENAI_API_KEY` | Optional | Enables AI-refined signals |
-   | `NEWS_API_KEY` | Optional | Enables news sentiment |
-   | `TELEGRAM_BOT_TOKEN` | Optional | Telegram alerts |
-   | `TELEGRAM_CHAT_ID` | Optional | Telegram alerts |
-   | `ACCOUNT_BALANCE_USD` | Optional | Default `10` |
-   | `AI_ENABLED` | Optional | `true` / `false` |
+   | `OPENAI_API_KEY` | Optional | Enables AI-refined signals via GPT-4o |
+   | `NEWS_API_KEY` | Optional | Enables live news sentiment |
+   | `TELEGRAM_BOT_TOKEN` | Optional | Telegram trade alerts |
+   | `TELEGRAM_CHAT_ID` | Optional | Telegram trade alerts |
+   | `ACCOUNT_BALANCE_USD` | Optional | Default `10` — for position sizing |
+   | `AI_ENABLED` | Optional | `true` / `false` (default `true`) |
 
-   > Railway sets the `PORT` variable automatically — no manual configuration needed.
+   > Railway sets the `PORT` variable automatically — **do not** set it manually.
 
-5. Click **Deploy**. Once the build finishes, Railway provides a public URL:
+5. Click **Deploy**. The build takes 2–4 minutes (installing ML libraries).  
+   Once the build finishes, Railway provides a public URL like:
    ```
    https://<your-app-name>.up.railway.app
    ```
 
-6. Open the URL in your browser. You should see the trading-bot UI.  
-   Type any ticker (e.g. `AAPL`, `BTC-USD`) and click **Analyze** to get a live BUY/SELL/HOLD recommendation.
+6. Open the URL in your browser. You should see the AI Trading Bot UI.  
+   Type any ticker (e.g. `AAPL`, `BTC-USD`, `TSLA`) and click **⚡ Analyze**.
+
+#### Troubleshooting "this site can't be reached"
+
+If Railway shows the site as unreachable:
+1. In Railway dashboard → your project → **Deployments** tab: check if the latest build succeeded (green tick).
+2. If the build failed, open **Build Logs** to see the error.
+3. If the build succeeded but the service is down, open **Service Logs** — look for the gunicorn startup line:
+   ```
+   [INFO] Listening at: http://0.0.0.0:<PORT>
+   ```
+4. Make sure the service has a **public domain** assigned: Railway → your service → **Settings → Networking → Generate Domain**.
+5. The first startup takes ~60 seconds while the ML models load — the health check allows up to 5 minutes.
 
 ---
 

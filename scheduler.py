@@ -166,8 +166,15 @@ def scan_news() -> None:
 # Main scheduler loop
 # ---------------------------------------------------------------------------
 
+STARTUP_DELAY_SECS = 30  # Allow the HTTP server to pass its health check before scanning.
+
+
 def run_scheduler() -> None:
     """Blocking loop that runs market and news scans on their respective intervals."""
+    # Brief pause so the HTTP server has time to bind and pass the Railway health
+    # check before the first (potentially slow) market scan begins.
+    time.sleep(STARTUP_DELAY_SECS)
+
     send_alert(
         "🤖 <b>AI Trading Bot started!</b>\n"
         f"📋 Watching: {', '.join(WATCHLIST)}\n"
