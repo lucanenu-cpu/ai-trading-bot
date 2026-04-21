@@ -1,0 +1,9 @@
+[phases.setup]
+nixPkgs = ["python311", "libgcc"]
+
+[phases.install]
+cmds = ["pip install --no-cache-dir -r requirements.txt"]
+
+[start]
+# Single worker to stay within Railway free-tier memory limits (512 MB)
+cmd = "gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 120 server:app"
