@@ -286,6 +286,7 @@ button:active { transform: scale(0.97); }
 
 /* ── Trade levels card ── */
 .levels-card { grid-column: 1 / -1; }
+.levels-note { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); margin-left: 0.4rem; }
 .levels-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
